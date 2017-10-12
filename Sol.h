@@ -113,11 +113,11 @@ class Sol
 	                        // column 5: u2     values
 	                        // column 6: p2     values
 
-	VectorXd SoundSpeed_;//Dynamic Vector of 'NcellExt' rows and 2 columns:
+	MatrixXd SoundSpeed_;//Dynamic Vector of 'NcellExt' rows and 2 columns:
 	                        // column 0:  c1             values
 	                        // column 1:  c2             values
 
-	VectorXd Mach_;//Dynamic Vector of 'NcellExt' rows and 2 columns:
+	MatrixXd Mach_;//Dynamic Vector of 'NcellExt' rows and 2 columns:
 	                        // column 0:  Mach1          values
 	                        // column 1:  Mach2          values
 				
@@ -163,7 +163,7 @@ class Sol
         Vector7d& InitL, Vector7d& InitR,\
 		string SolType,\
 		string LeftBCType, string RightBCType,\
-        double x0,\
+        double x0\
 		);
 
 	//constructor by copy:
@@ -183,24 +183,24 @@ class Sol
             int NcellExt, int Ncells, double Length);
 
 	//Update methods:
-	void SoundSpeed_Update();//Updates SoundSpeed_ vector of Sol using new values
-	void Mach_Update();//Updates MachMax_ , MachMin_ using the new Sol values
+//    void SoundSpeed_Update();//Updates SoundSpeed_ vector of Sol using new values
+//	void Mach_Update();//Updates MachMax_ , MachMin_ using the new Sol values
 
     //Once ConsVarFlux_ has been updated using the solver, this function updates the conservative variables matrix ConsVar_
-	void ConsVar_Update(  Mesh& mesh, double TimeStep, \
+//	void ConsVar_Update(  Mesh& mesh, double TimeStep, \
         string SchemeType\
         );
 
     //Once ConsVar_ has been updated, this function updates the non conservative variables matrix NConsVar_
-	void NConsVar_Update();
+//	void NConsVar_Update();
 
     //Theoretical solution update
-	void SolExact_Update(Mesh& mesh, double time); 
+//	void SolExact_Update(Mesh& mesh, double time); 
 
 	//Error computation
 
     //compute the L1 errors of the variables rho, u, p
-	void Compute_L1_err(Mesh& mesh);  
+//	void Compute_L1_err(Mesh& mesh);  
 
 };
 
