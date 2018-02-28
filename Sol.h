@@ -183,11 +183,15 @@ class Sol
             int NcellExt, int Ncells, double Length);
 
 	//Update methods:
-//    void SoundSpeed_Update();//Updates SoundSpeed_ vector of Sol using new values
-//	void Mach_Update();//Updates MachMax_ , MachMin_ using the new Sol values
+
+    //Updates SoundSpeed_  of Sol using new values
+    void SoundSpeed_Update();
+
+    //Updates MachMax_ , MachMin_ using the new Sol values
+	void Mach_Update();
 
     //Once ConsVarFlux_ has been updated using the solver, this function updates the conservative variables matrix ConsVar_
-//	void ConsVar_Update(  Mesh& mesh, double TimeStep, \
+	void ConsVar_Update(  Mesh& mesh, double TimeStep, \
         string SchemeType\
         );
 

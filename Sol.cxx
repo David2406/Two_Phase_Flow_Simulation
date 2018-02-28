@@ -215,951 +215,961 @@ void Sol::ConsVarInit(Vector7d& InitR, Vector7d& InitL,\
 
 //Update methods:
 
-//void Sol::SoundSpeed_Update(){
-//
-//    VectorXd Rhonew=ConsVar_.col(0);
-//    VectorXd Pnew=NConsVar_.col(2);
-//
-//    SoundSpeed_=Sound_Speed_EOS_Tab(UN, (*this).SolTherm_, Rhonew,Pnew);                         
-//}
-//
-//void Sol::Mach_Update(){
-//
-//    VectorXd Unew=NConsVar_.col(1);
-//    Mach_=(Unew.cwiseQuotient(SoundSpeed_));
-//    MachMax_=Mach_.array().abs().maxCoeff();
-//
-//    MachMin_=Mach_.array().abs().minCoeff();
-//
-//}
-//
-//void Sol::ConsVar_Update( Mesh& mesh, double TimeStep, \
-//        string SchemeType\
-//        ){
-//
-//    //Mesh parameters:
-//    int NcellExt=mesh.Get_NcellExt();
-//    int Nfaces=mesh.Get_Nfaces();
-//    int LeftBCface=mesh.Get_LeftBCface();
-//    int RightBCface=mesh.Get_RightBCface();
-//    double SpaceStep=mesh.Get_SpaceStep();
-//    int L,R;
-//
-//    string LeftBCType=(*this).Get_LeftBCType();
-//    string RightBCType=(*this).Get_RightBCType();
-//
-//    //For the JMH splitting conservative variables are classically updated
-//    if(!(SchemeType1=="GIRARDIN" && SchemeType2=="GIRARDIN")){
-//
-//        for(int face_id=0; face_id<Nfaces; face_id++){ //Loop on all the faces, including these located at the boundaries
-//
-//
-//            L=mesh.FaceIndex_(face_id,1); //Index of the cell located to the left
-//            R=mesh.FaceIndex_(face_id,2); //Index of the cell located to the right
-//
-//            (*this).ConsVar_.row(L)+=-(TimeStep/SpaceStep)*(*this).ConsVarFlux_.row(face_id);
-//            //Conservativity is ensured 
-//            (*this).ConsVar_.row(R)-=-(TimeStep/SpaceStep)*(*this).ConsVarFlux_.row(face_id);
-//
-//        }
-//
-//        //Special treatment for boundary faces:
-//
-//        if(LeftBCType=="transparent"){
-//
-//            L=mesh.FaceIndex_(LeftBCface,1); //Index of the cell located to the left
-//            R=mesh.FaceIndex_(LeftBCface,2); //Index of the cell located to the right
-//            //The Fictitious Boundary State is set equal to the Physical State
-//            (*this).ConsVar_.row(L)=(*this).ConsVar_.row(R); 
-//        }
-//        if(RightBCType=="transparent"){
-//
-//            L=mesh.FaceIndex_(RightBCface,1); //Index of the cell located to the left
-//            R=mesh.FaceIndex_(RightBCface,2); //Index of the cell located to the right
-//            //The Fictitious Boundary State is set equal to the Physical State
-//            (*this).ConsVar_.row(R)=(*this).ConsVar_.row(L); 
-//        }
-//
-//    }
-//
-//    //In the case Girardin's splitting and acoustic step
-//    else if(SchemeType2=="GIRARDIN" && SplittingStep2==true){
-//
-//        //Loop on all the faces, including these located at the boundaries
-//        for(int face_id=0; face_id<Nfaces; face_id++){ 
-//
-//            L=mesh.FaceIndex_(face_id,1); //Index of the cell located to the left
-//            R=mesh.FaceIndex_(face_id,2); //Index of the cell located to the right
-//
-//            //building 1+delta_t/delta_x * (u_faceR- u_faceL)
-//            (*this).NLGirardinOp_(L)+=(TimeStep/SpaceStep)*ConsVarFlux_(face_id,0);
-//            (*this).NLGirardinOp_(R)-=(TimeStep/SpaceStep)*ConsVarFlux_(face_id,0);
-//
-//            //Momentum first update
-//            (*this).ConsVar_(L,1)+=-(TimeStep/SpaceStep)*(*this).ConsVarFlux_(face_id,1);
-//            (*this).ConsVar_(R,1)-=-(TimeStep/SpaceStep)*(*this).ConsVarFlux_(face_id,1);
-//
-//            //Energy first uppdate
-//            (*this).ConsVar_(L,2)+=-(TimeStep/SpaceStep)*(*this).ConsVarFlux_(face_id,2);
-//            (*this).ConsVar_(R,2)-=-(TimeStep/SpaceStep)*(*this).ConsVarFlux_(face_id,2);
-//
-//	    //No Update for mass fraction Y
-//        }
-//        //Loop on all cells, including these located on the boundaries
-//        for (int cell_id=0; cell_id<NcellExt; cell_id++){
-//
-//            //Mass Update:
-//            (*this).ConsVar_(cell_id,0)/=NLGirardinOp_(cell_id);
-//            //Momentum Update:
-//            (*this).ConsVar_(cell_id,1)/=NLGirardinOp_(cell_id);
-//            //Energy Update:
-//            (*this).ConsVar_(cell_id,2)/=NLGirardinOp_(cell_id);
-//            //Y Update:
-//            (*this).ConsVar_(cell_id,3)/=NLGirardinOp_(cell_id);
-//
-//        }
-//
-//        //Special treatment for boundary faces:
-//
-//        if(LeftBCType=="transparent"){
-//
-//            L=mesh.FaceIndex_(LeftBCface,1); //Index of the cell located to the left
-//            R=mesh.FaceIndex_(LeftBCface,2); //Index of the cell located to the right
-//            //The Fictitious Boundary State is set equal to the Physical State
-//            (*this).ConsVar_.row(L)=(*this).ConsVar_.row(R); 
-//        }
-//        if(RightBCType=="transparent"){
-//
-//            L=mesh.FaceIndex_(RightBCface,1); //Index of the cell located to the left
-//            R=mesh.FaceIndex_(RightBCface,2); //Index of the cell located to the right
-//            //The Fictitious Boundary State is set equal to the Physical State
-//            (*this).ConsVar_.row(R)=(*this).ConsVar_.row(L); 
-//        }
-//    }
-//    //In the case Girardin's splitting and convective step
-//    else if(SchemeType1=="GIRARDIN" && SplittingStep1==true){
-//
-//        //Loop on all cells, including these located on the boundaries
-//        for (int cell_id=0; cell_id<NcellExt; cell_id++){
-//
-//            //Mass Update:
-//            (*this).ConsVar_(cell_id,0)*=NLGirardinOp_(cell_id);
-//            //Momentum Update:
-//            (*this).ConsVar_(cell_id,1)*=NLGirardinOp_(cell_id);
-//            //Energy Update:
-//            (*this).ConsVar_(cell_id,2)*=NLGirardinOp_(cell_id);
-//            //Y Update:
-//            (*this).ConsVar_(cell_id,3)*=NLGirardinOp_(cell_id);
-//
-//
-//        }
-//        //Loop on all the faces, including these located at the boundaries
-//        for(int face_id=0; face_id<Nfaces; face_id++){ 
-//
-//            L=mesh.FaceIndex_(face_id,1); //Index of the cell located to the left
-//            R=mesh.FaceIndex_(face_id,2); //Index of the cell located to the right
-//
-//            (*this).ConsVar_.row(L)+=-(TimeStep/SpaceStep)*(*this).ConsVarFlux_.row(face_id);
-//            //Conservativity is ensured 
-//            (*this).ConsVar_.row(R)-=-(TimeStep/SpaceStep)*(*this).ConsVarFlux_.row(face_id);
-//
-//        }
-//
-//        //Special treatment for boundary faces:
-//
-//        if(LeftBCType=="transparent"){
-//
-//            L=mesh.FaceIndex_(LeftBCface,1); //Index of the cell located to the left
-//            R=mesh.FaceIndex_(LeftBCface,2); //Index of the cell located to the right
-//            //The Fictitious Boundary State is set equal to the Physical State
-//            (*this).ConsVar_.row(L)=(*this).ConsVar_.row(R); 
-//        }
-//        if(RightBCType=="transparent"){
-//
-//            L=mesh.FaceIndex_(RightBCface,1); //Index of the cell located to the left
-//            R=mesh.FaceIndex_(RightBCface,2); //Index of the cell located to the right
-//            //The Fictitious Boundary State is set equal to the Physical State
-//            (*this).ConsVar_.row(R)=(*this).ConsVar_.row(L); 
-//        }
-//    }
-//}
-//
-//
-//void Sol::NConsVar_Update(){
-//
-//    // rho update
-//    (*this).NConsVar_.col(0)=(*this).ConsVar_.col(0);
-//    VectorXd rho=(*this).ConsVar_.col(0);
-//
-//    // u update
-//    (*this).NConsVar_.col(1)=(*this).ConsVar_.col(1).cwiseQuotient((*this).ConsVar_.col(0)); 
-//    //Total energy by unit mass
-//    VectorXd e_T=(*this).ConsVar_.col(2).cwiseQuotient((*this).ConsVar_.col(0));
-//    //Kinetic energy by unit mass
-//    VectorXd e_k=(ONE_OVER_TWO)*((*this).NConsVar_.col(1)).array().square();
-//    //Internal energy by unit mass
-//    VectorXd e=e_T-e_k;
-//
-//    //pressure update
-//    VectorXd p=Pressure_EOS_Tab((*this).SolTherm_, rho, e);
-//    (*this).NConsVar_.col(2)=p;
-//
-//    // Y update
-//    (*this).NConsVar_.col(3)=(*this).ConsVar_.col(3).cwiseQuotient((*this).ConsVar_.col(0)); 
-//}
-//
-//
-//void Sol::SolExact_Update(Mesh& mesh, double time){
-//
-//    string SolType=(*this).SolType_;
-//
-//    double rho0_L=(*this).rho0_L_;
-//    double rho0_R=(*this).rho0_R_;
-//
-//    double u0_L=(*this).u0_L_;
-//    double u0_R=(*this).u0_R_;
-//
-//    double p0_L=(*this).p0_L_;
-//    double p0_R=(*this).p0_R_;
-//
-//    double Y0_L=(*this).Y0_L_;
-//    double Y0_R=(*this).Y0_R_;
-//
-//    double c0_L=(*this).c0_L_;
-//    double c0_R=(*this).c0_R_;
-//
-//    //Double Riemann Problem
-//    double rho_L_starstar, rho_R_starstar;
-//    double p_starstar, u_starstar;
-//    double c_L_starstar;
-//    double sigma_L_starstar, sigma_R_starstar;
-//    double rho0_interm;
-//    double u0_interm  ;
-//    double p0_interm  ;
-//    double Y0_interm  ;
-//    double c0_interm  ;
-//    double x_1        ;
-//
-//    if((*this).Nbr_Areas_> 2){
-//
-//        rho0_interm = (*this).rho0_interm_;
-//        u0_interm   = (*this).u0_interm_;
-//        p0_interm   = (*this).p0_interm_;
-//        Y0_interm   = (*this).Y0_interm_;
-//        c0_interm   = (*this).c0_interm_;
-//        x_1         = (*this).x_1_;
-//
-//    }
-//
-//    double xcell;
-//    double x_0=(*this).x_0_;
-//
-//    int NcellExt     = mesh.Get_NcellExt();
-//    double SpaceStep = mesh.Get_SpaceStep();
-//
-//    //Exact solution states:
-//    double rho_L_star, rho_R_star;
-//    double p_star, u_star;
-//    double c_L_star, c_R_star;
-//    double sigma_L_star, sigma_R_star; //Shock or Rarefaction wave velocities
-//
-//    if(SolType!="Pure Contact" && SolType!="Pure Shock" && SolType!="Pure Rarefaction" &&\
-//	    SolType!="Sinus Impulse" && SolType!="Double Riemann Problem"){
-//
-//	//In the case of a pure contact discontinuity we don't need to compute p_star
-//
-//	double p_inf=ZERO;
-//	double p_sup=HUNDRED*max(p0_L,p0_R);
-//	p_star=P_Euler_Dichotomy(p_inf, p_sup, SolType, (*this).SolTherm_, rho0_L, rho0_R,\
-//		u0_L, u0_R, p0_L, p0_R, c0_L, c0_R, epsDicho);
-//    }
-//
-//    if (SolType=="Pure Contact"){
-//	//The theoretical sol is maid of one contact discontinuity only
-//	//its speed should be u=u0_L=u0_R
-//
-//	if(fabs(u0_L-u0_R)>epsZero){
-//
-//	    cout<<"Alert SolExact_Update: Pure Contact discontinuity but u0_L != u0_R"\
-//		<<endl;
-//	    exit(EXIT_FAILURE);
-//	}
-//
-//	for (int cell=0; cell<NcellExt; cell++){
-//
-//	    xcell=mesh.CellCoordsTab_(cell,1);
-//	    /*cout<<"xcell= "<<xcell<<endl;
-//	    cout<<"u0= "<<u0_L<<endl;
-//	    cout<<"x_0+t*u0= "<<x_0+time*u0_L<<endl;*/
-//
-//	    if(xcell<=x_0+time*u0_L){
-//
-//		(*this).SolExact_(cell,0)=rho0_L;
-//		(*this).SolExact_(cell,1)=u0_L;
-//		(*this).SolExact_(cell,2)=p0_L;
-//		(*this).SolExact_(cell,3)=Y0_L;
-//
-//	    }
-//	    else{
-//
-//		(*this).SolExact_(cell,0)=rho0_R;
-//		(*this).SolExact_(cell,1)=u0_R;
-//		(*this).SolExact_(cell,2)=p0_R;
-//		(*this).SolExact_(cell,3)=Y0_R;
-//	    }
-//
-//
-//	}
-//
-//    }
-//    else if (SolType=="Pure Shock"){
-//
-//	//Shock Speed
-//	double sigma=c0_L;
-//
-//	for (int cell=0; cell<NcellExt; cell++){
-//
-//	    xcell=mesh.CellCoordsTab_(cell,1);
-//
-//	    if(xcell<=x_0+time*sigma){
-//
-//		(*this).SolExact_(cell,0)=rho0_L;
-//		(*this).SolExact_(cell,1)=u0_L;
-//		(*this).SolExact_(cell,2)=p0_L;
-//		(*this).SolExact_(cell,3)=Y0_L;
-//
-//	    }
-//	    else{
-//
-//		(*this).SolExact_(cell,0)=rho0_R;
-//		(*this).SolExact_(cell,1)=u0_R;
-//		(*this).SolExact_(cell,2)=p0_R;
-//		(*this).SolExact_(cell,3)=Y0_R;
-//	    }
-//
-//	}
-//
-//    }
-//    else if (SolType=="Pure Rarefaction"){
-//
-//	for (int cell=0; cell<NcellExt; cell++){
-//
-//	    xcell=mesh.CellCoordsTab_(cell,1);
-//
-//	    if(xcell<=x_0+time*(u0_L-c0_L)){
-//
-//		(*this).SolExact_(cell,0)=rho0_L;
-//		(*this).SolExact_(cell,1)=u0_L;
-//		(*this).SolExact_(cell,2)=p0_L;
-//		(*this).SolExact_(cell,3)=Y0_L;
-//
-//	    }
-//	    else if (xcell<=x_0+time*(u0_R-c0_R)){
-//
-//		double X=xcell-x_0;
-//		Vector3d State_L_Fan=State_k_Fan(rho0_L, u0_L, p0_L, c0_L,\
-//			(*this).SolTherm_, 1, \
-//			X, time); 
-//
-//		(*this).SolExact_(cell,0)=State_L_Fan(0);
-//		(*this).SolExact_(cell,1)=State_L_Fan(1);
-//		(*this).SolExact_(cell,2)=State_L_Fan(2);
-//		(*this).SolExact_(cell,3)=Y0_L;
-//
-//	    }
-//	    else{
-//
-//		(*this).SolExact_(cell,0)=rho0_R;
-//		(*this).SolExact_(cell,1)=u0_R;
-//		(*this).SolExact_(cell,2)=p0_R;
-//		(*this).SolExact_(cell,3)=Y0_R;
-//	    }
-//
-//	}
-//
-//    }
-//    else if (SolType=="Sinus Impulse"){
-//
-//	int    NPI_sin   = (*this).NPI_sin_;
-//	int    NPI_gauss = (*this).NPI_gauss_;
-//	double M0        = (*this).M0_;
-//	double sigma = NPI_gauss * SpaceStep;
-//	double k_c   = (TWO*Pi) / (NPI_sin*SpaceStep);
-//
-//	for (int cell=0; cell<NcellExt; cell++){
-//
-//	    xcell=mesh.CellCoordsTab_(cell,1);
-//
-//	    if(xcell<=x_0+time*u0_L){
-//
-//		(*this).SolExact_(cell,0)=\
-//		rho0_L * (ONE + pow(M0, TWO) * sin(k_c * \
-//			(xcell-(x_0+time*u0_L-k_c*Pi/TWO))) *\
-//		    (ONE/(sigma*sqrt(TWO*Pi)))*\
-//		    exp(-ONE_OVER_TWO * pow((xcell - (x_0+time*u0_L))/sigma, TWO)));
-//
-//		(*this).SolExact_(cell,1)=u0_L;
-//		(*this).SolExact_(cell,2)=p0_L;
-//		(*this).SolExact_(cell,3)=Y0_L;
-//
-//	    }
-//	    else{
-//
-//		(*this).SolExact_(cell,0)=\
-//		rho0_L * (ONE + pow(M0, TWO) * sin(k_c * \
-//			(xcell-(x_0+time*u0_L-k_c*Pi/TWO))) *\
-//		    (ONE/(sigma*sqrt(TWO*Pi)))*\
-//		    exp(-ONE_OVER_TWO * pow((xcell - (x_0+time*u0_L))/sigma, TWO)));
-//		(*this).SolExact_(cell,1)=u0_L;
-//		(*this).SolExact_(cell,2)=p0_L;
-//		(*this).SolExact_(cell,3)=Y0_R;
-//	    }
-//
-//
-//	}
-//    }
-//    else if (SolType=="Double Riemann Problem"){
-//
-//        string SubSolType = "Left Rarefaction Right Shock";
-//
-//        //1st Riemann Problem: p_star
-//        double p_inf=ZERO;
-//        double p_sup=HUNDRED*max(p0_L,p0_interm);
-//        p_star=P_Euler_Dichotomy(p_inf, p_sup, SubSolType,\
-//                (*this).SolTherm_,\
-//                rho0_L, rho0_interm,\
-//                u0_L, u0_interm,\
-//                p0_L, p0_interm,\
-//                c0_L, c0_interm, epsDicho);
-//
-//        //u star estimation
-//        u_star=u0_L-Euler_k_Resolvant(p_star, (*this).SolTherm_, \
-//                rho0_L, u0_L, p0_L, c0_L);
-//
-//        //Left quantities
-//        rho_L_star=Rho_k_star_Resolvant(rho0_L, p0_L, p_star, (*this).SolTherm_);
-//        c_L_star=C_k_star_Resolvant( c0_L, p0_L, p_star, (*this).SolTherm_);
-//
-//        sigma_L_star=u_star-c_L_star;
-//
-//        //Right quantities
-//        rho_R_star=Rho_k_star_Resolvant(rho0_interm, p0_interm, p_star, (*this).SolTherm_);
-//
-//        sigma_R_star=Sigma_k_star_Resolvant(u0_interm, c0_interm, p0_interm, p_star,\
-//                2, (*this).SolTherm_ );
-//
-//        //2nd Riemann Problem: p_starstar
-//        p_inf=ZERO;
-//        p_sup=HUNDRED*max(p0_interm,p0_R);
-//        p_starstar=P_Euler_Dichotomy(p_inf, p_sup, SubSolType,\
-//                (*this).SolTherm_,\
-//                rho0_interm, rho0_R,\
-//                u0_interm, u0_R,\
-//                p0_interm, p0_R,\
-//                c0_interm, c0_R, epsDicho);
-//
-//        //u starstar estimation
-//        u_starstar=u0_interm-Euler_k_Resolvant(p_starstar, (*this).SolTherm_, \
-//                rho0_interm, u0_interm, p0_interm, c0_interm);
-//
-//        //Left quantities
-//        rho_L_starstar=Rho_k_star_Resolvant(rho0_interm, p0_interm, p_starstar, (*this).SolTherm_);
-//        c_L_starstar=C_k_star_Resolvant( c0_interm, p0_interm, p_starstar, (*this).SolTherm_);
-//
-//        sigma_L_starstar=u_starstar-c_L_starstar;
-//
-//        //Right quantities
-//        rho_R_starstar=Rho_k_star_Resolvant(rho0_R, p0_R, p_starstar, (*this).SolTherm_);
-//
-//        sigma_R_starstar=Sigma_k_star_Resolvant(u0_R, c0_R, p0_R, p_starstar,\
-//                2, (*this).SolTherm_ );
-//
-//        for (int cell=0; cell<NcellExt; cell++){
-//
-//            xcell=mesh.CellCoordsTab_(cell,1);
-//
-//            if(xcell<=x_0+(u0_L-c0_L)*time){
-//
-//                (*this).SolExact_(cell,0)=rho0_L;
-//                (*this).SolExact_(cell,1)=u0_L;
-//                (*this).SolExact_(cell,2)=p0_L;
-//                (*this).SolExact_(cell,3)=Y0_L;
-//
-//            }
-//            else if(xcell<=x_0+sigma_L_star*time){
-//                //Inside the Left Rarefaction wave
-//
-//                double X=xcell-x_0;
-//                Vector3d State_L_Fan=State_k_Fan(rho0_L, u0_L, p0_L, c0_L,\
-//                        (*this).SolTherm_, 1, \
-//                        X, time); 
-//
-//                (*this).SolExact_(cell,0)=State_L_Fan(0);
-//                (*this).SolExact_(cell,1)=State_L_Fan(1);
-//                (*this).SolExact_(cell,2)=State_L_Fan(2);
-//                (*this).SolExact_(cell,3)=Y0_L;
-//
-//            }
-//            else if(xcell<=x_0+u_star*time){
-//                //Inside the Left star region
-//
-//                (*this).SolExact_(cell,0)=rho_L_star;
-//                (*this).SolExact_(cell,1)=u_star;
-//                (*this).SolExact_(cell,2)=p_star;
-//                (*this).SolExact_(cell,3)=Y0_L;
-//
-//            }
-//            else if(xcell<=x_0+sigma_R_star*time){
-//
-//                (*this).SolExact_(cell,0)=rho_R_star;
-//                (*this).SolExact_(cell,1)=u_star;
-//                (*this).SolExact_(cell,2)=p_star;
-//                (*this).SolExact_(cell,3)=Y0_interm;
-//
-//            }
-//            else if(xcell<=x_1+(u0_interm-c0_interm)*time){
-//
-//                (*this).SolExact_(cell,0)=rho0_interm;
-//                (*this).SolExact_(cell,1)=u0_interm;
-//                (*this).SolExact_(cell,2)=p0_interm;
-//                (*this).SolExact_(cell,3)=Y0_interm;
-//
-//            }
-//            else if(xcell<=x_1+sigma_L_starstar*time){
-//                //Inside the Left Rarefaction wave
-//
-//                double X=xcell-x_1;
-//                Vector3d State_L_Fan=State_k_Fan(\
-//                        rho0_interm, u0_interm,\
-//                        p0_interm, c0_interm,\
-//                        (*this).SolTherm_, 1, \
-//                        X, time); 
-//
-//                (*this).SolExact_(cell,0)=State_L_Fan(0);
-//                (*this).SolExact_(cell,1)=State_L_Fan(1);
-//                (*this).SolExact_(cell,2)=State_L_Fan(2);
-//                (*this).SolExact_(cell,3)=Y0_interm;
-//
-//            }
-//            else if(xcell<=x_1+u_starstar*time){
-//                //Inside the Left star region
-//
-//                (*this).SolExact_(cell,0)=rho_L_starstar;
-//                (*this).SolExact_(cell,1)=u_starstar;
-//                (*this).SolExact_(cell,2)=p_starstar;
-//                (*this).SolExact_(cell,3)=Y0_interm;
-//
-//            }
-//            else if(xcell<=x_1+sigma_R_starstar*time){
-//
-//                (*this).SolExact_(cell,0)=rho_R_starstar;
-//                (*this).SolExact_(cell,1)=u_starstar;
-//                (*this).SolExact_(cell,2)=p_starstar;
-//                (*this).SolExact_(cell,3)=Y0_R;
-//
-//            }
-//            else{
-//
-//                (*this).SolExact_(cell,0)=rho0_R;
-//                (*this).SolExact_(cell,1)=u0_R;
-//                (*this).SolExact_(cell,2)=p0_R;
-//                (*this).SolExact_(cell,3)=Y0_R;
-//            }
-//
-//        }
-//    }
-//
-//    else if (SolType=="Left Rarefaction Right Rarefaction"){
-//	//The theoretical sol is maid of 2 rarefaction waves
-//
-//	//u star estimation
-//	u_star=u0_L-Euler_k_Resolvant(p_star, (*this).SolTherm_, \
-//		rho0_L, u0_L, p0_L, c0_L);
-//
-//	//Left quantities
-//	rho_L_star=Rho_k_star_Resolvant(rho0_L, p0_L, p_star, (*this).SolTherm_);
-//	c_L_star=C_k_star_Resolvant( c0_L, p0_L, p_star, (*this).SolTherm_);
-//
-//	sigma_L_star=u_star-c_L_star;
-//	
-//	//Right quantities
-//	rho_R_star=Rho_k_star_Resolvant(rho0_R, p0_R, p_star, (*this).SolTherm_);
-//	c_R_star=C_k_star_Resolvant( c0_R, p0_R, p_star, (*this).SolTherm_);
-//
-//	sigma_R_star=u_star+c_R_star;
-//
-//	for (int cell=0; cell<NcellExt; cell++){
-//
-//	    xcell=mesh.CellCoordsTab_(cell,1);
-//	    /*cout<<"xcell= "<<xcell<<endl;
-//	    cout<<"u0= "<<u0_L<<endl;
-//	    cout<<"x_0+t*u0= "<<x_0+time*u0_L<<endl;*/
-//
-//	    if(xcell<=x_0+(u0_L-c0_L)*time){
-//
-//		(*this).SolExact_(cell,0)=rho0_L;
-//		(*this).SolExact_(cell,1)=u0_L;
-//		(*this).SolExact_(cell,2)=p0_L;
-//		(*this).SolExact_(cell,3)=Y0_L;
-//
-//	    }
-//	    else if(xcell<=x_0+sigma_L_star*time){
-//		//Inside the Left Rarefaction wave
-//
-//		double X=xcell-x_0;
-//		Vector3d State_L_Fan=State_k_Fan(rho0_L, u0_L, p0_L, c0_L,\
-//			(*this).SolTherm_, 1, \
-//			X, time); 
-//
-//		(*this).SolExact_(cell,0)=State_L_Fan(0);
-//		(*this).SolExact_(cell,1)=State_L_Fan(1);
-//		(*this).SolExact_(cell,2)=State_L_Fan(2);
-//		(*this).SolExact_(cell,3)=Y0_L;
-//
-//	    }
-//	    else if(xcell<=x_0+u_star*time){
-//		//Inside the Left star region
-//
-//		(*this).SolExact_(cell,0)=rho_L_star;
-//		(*this).SolExact_(cell,1)=u_star;
-//		(*this).SolExact_(cell,2)=p_star;
-//		(*this).SolExact_(cell,3)=Y0_L;
-//
-//	    }
-//	    else if(xcell<=x_0+sigma_R_star*time){
-//
-//		(*this).SolExact_(cell,0)=rho_R_star;
-//		(*this).SolExact_(cell,1)=u_star;
-//		(*this).SolExact_(cell,2)=p_star;
-//		(*this).SolExact_(cell,3)=Y0_R;
-//
-//	    }
-//	    else if(xcell<=x_0+(u0_R+c0_R)*time){
-//		//Inside the Right rarefaction wave 
-//
-//		double X=xcell-x_0;
-//		Vector3d State_R_Fan=State_k_Fan(rho0_R, u0_R, p0_R, c0_R,\
-//			(*this).SolTherm_, 2, \
-//			X, time); 
-//
-//		(*this).SolExact_(cell,0)=State_R_Fan(0);
-//		(*this).SolExact_(cell,1)=State_R_Fan(1);
-//		(*this).SolExact_(cell,2)=State_R_Fan(2);
-//		(*this).SolExact_(cell,3)=Y0_R;
-//
-//	    }
-//	    else{
-//
-//		(*this).SolExact_(cell,0)=rho0_R;
-//		(*this).SolExact_(cell,1)=u0_R;
-//		(*this).SolExact_(cell,2)=p0_R;
-//		(*this).SolExact_(cell,3)=Y0_R;
-//	    }
-//
-//	}
-//
-//    }
-//    else if (SolType=="Left Shock Right Shock"){
-//	//The theoretical sol is maid of 2 shock waves
-//
-//	//u star estimation
-//	u_star=u0_L-Euler_k_Resolvant(p_star, (*this).SolTherm_, \
-//		rho0_L, u0_L, p0_L, c0_L);
-//
-//	//Left quantities
-//	rho_L_star=Rho_k_star_Resolvant(rho0_L, p0_L, p_star, (*this).SolTherm_);
-//	
-//	sigma_L_star=Sigma_k_star_Resolvant(u0_L, c0_L, p0_L, p_star,\
-//		1, (*this).SolTherm_ );
-//
-//	//Right quantities
-//	rho_R_star=Rho_k_star_Resolvant(rho0_R, p0_R, p_star, (*this).SolTherm_);
-//
-//	sigma_R_star=Sigma_k_star_Resolvant(u0_R, c0_R, p0_R, p_star,\
-//		2, (*this).SolTherm_ );
-//
-//	for (int cell=0; cell<NcellExt; cell++){
-//
-//
-//	    xcell=mesh.CellCoordsTab_(cell,1);
-//	    /*cout<<"xcell= "<<xcell<<endl;
-//	    cout<<"u0= "<<u0_L<<endl;
-//	    cout<<"x_0+t*u0= "<<x_0+time*u0_L<<endl;*/
-//
-//	    if(xcell<=x_0+sigma_L_star*time){
-//
-//		(*this).SolExact_(cell,0)=rho0_L;
-//		(*this).SolExact_(cell,1)=u0_L;
-//		(*this).SolExact_(cell,2)=p0_L;
-//		(*this).SolExact_(cell,3)=Y0_L;
-//
-//	    }
-//	    else if(xcell<=x_0+u_star*time){
-//
-//		(*this).SolExact_(cell,0)=rho_L_star;
-//		(*this).SolExact_(cell,1)=u_star;
-//		(*this).SolExact_(cell,2)=p_star;
-//		(*this).SolExact_(cell,3)=Y0_L;
-//
-//	    }
-//	    else if(xcell<=x_0+sigma_R_star*time){
-//
-//		(*this).SolExact_(cell,0)=rho_R_star;
-//		(*this).SolExact_(cell,1)=u_star;
-//		(*this).SolExact_(cell,2)=p_star;
-//		(*this).SolExact_(cell,3)=Y0_R;
-//
-//	    }
-//	    else{
-//
-//		(*this).SolExact_(cell,0)=rho0_R;
-//		(*this).SolExact_(cell,1)=u0_R;
-//		(*this).SolExact_(cell,2)=p0_R;
-//		(*this).SolExact_(cell,3)=Y0_R;
-//	    }
-//
-//
-//	}
-//
-//    }
-//    else if (SolType=="Left Rarefaction Right Shock"){
-//	//The theoretical sol is maid of 2 rarefaction waves
-//
-//	//u star estimation
-//	u_star=u0_L-Euler_k_Resolvant(p_star, (*this).SolTherm_, \
-//		rho0_L, u0_L, p0_L, c0_L);
-//
-//	//Left quantities
-//	rho_L_star=Rho_k_star_Resolvant(rho0_L, p0_L, p_star, (*this).SolTherm_);
-//	c_L_star=C_k_star_Resolvant( c0_L, p0_L, p_star, (*this).SolTherm_);
-//
-//	sigma_L_star=u_star-c_L_star;
-//	
-//	//Right quantities
-//	rho_R_star=Rho_k_star_Resolvant(rho0_R, p0_R, p_star, (*this).SolTherm_);
-//	
-//	sigma_R_star=Sigma_k_star_Resolvant(u0_R, c0_R, p0_R, p_star,\
-//		2, (*this).SolTherm_ );
-//
-//	for (int cell=0; cell<NcellExt; cell++){
-//
-//	    xcell=mesh.CellCoordsTab_(cell,1);
-//	    /*cout<<"xcell= "<<xcell<<endl;
-//	    cout<<"u0= "<<u0_L<<endl;
-//	    cout<<"x_0+t*u0= "<<x_0+time*u0_L<<endl;*/
-//
-//	    if(xcell<=x_0+(u0_L-c0_L)*time){
-//
-//		(*this).SolExact_(cell,0)=rho0_L;
-//		(*this).SolExact_(cell,1)=u0_L;
-//		(*this).SolExact_(cell,2)=p0_L;
-//		(*this).SolExact_(cell,3)=Y0_L;
-//
-//	    }
-//	    else if(xcell<=x_0+sigma_L_star*time){
-//		//Inside the Left Rarefaction wave
-//
-//		double X=xcell-x_0;
-//		Vector3d State_L_Fan=State_k_Fan(rho0_L, u0_L, p0_L, c0_L,\
-//			(*this).SolTherm_, 1, \
-//			X, time); 
-//
-//		(*this).SolExact_(cell,0)=State_L_Fan(0);
-//		(*this).SolExact_(cell,1)=State_L_Fan(1);
-//		(*this).SolExact_(cell,2)=State_L_Fan(2);
-//		(*this).SolExact_(cell,3)=Y0_L;
-//
-//	    }
-//	    else if(xcell<=x_0+u_star*time){
-//		//Inside the Left star region
-//
-//		(*this).SolExact_(cell,0)=rho_L_star;
-//		(*this).SolExact_(cell,1)=u_star;
-//		(*this).SolExact_(cell,2)=p_star;
-//		(*this).SolExact_(cell,3)=Y0_L;
-//
-//	    }
-//	    else if(xcell<=x_0+sigma_R_star*time){
-//
-//		(*this).SolExact_(cell,0)=rho_R_star;
-//		(*this).SolExact_(cell,1)=u_star;
-//		(*this).SolExact_(cell,2)=p_star;
-//		(*this).SolExact_(cell,3)=Y0_R;
-//
-//	    }
-//	    else{
-//
-//		(*this).SolExact_(cell,0)=rho0_R;
-//		(*this).SolExact_(cell,1)=u0_R;
-//		(*this).SolExact_(cell,2)=p0_R;
-//		(*this).SolExact_(cell,3)=Y0_R;
-//	    }
-//
-//
-//	}
-//
-//    }
-//    else if (SolType=="Left Shock Right Rarefaction"){
-//	//The theoretical sol is maid of 2 rarefaction waves
-//
-//	//u star estimation
-//	u_star=u0_L-Euler_k_Resolvant(p_star, (*this).SolTherm_, \
-//		rho0_L, u0_L, p0_L, c0_L);
-//
-//	//Left quantities
-//	rho_L_star=Rho_k_star_Resolvant(rho0_L, p0_L, p_star, (*this).SolTherm_);
-//	
-//	sigma_L_star=Sigma_k_star_Resolvant(u0_L, c0_L, p0_L, p_star,\
-//		1, (*this).SolTherm_ );
-//
-//	//Right quantities
-//	rho_R_star=Rho_k_star_Resolvant(rho0_R, p0_R, p_star, (*this).SolTherm_);
-//	c_R_star=C_k_star_Resolvant( c0_R, p0_R, p_star, (*this).SolTherm_);
-//	
-//	sigma_R_star=u_star+c_R_star;
-//
-//	for (int cell=0; cell<NcellExt; cell++){
-//
-//
-//	    xcell=mesh.CellCoordsTab_(cell,1);
-//	    /*cout<<"xcell= "<<xcell<<endl;
-//	    cout<<"u0= "<<u0_L<<endl;
-//	    cout<<"x_0+t*u0= "<<x_0+time*u0_L<<endl;*/
-//
-//	    if(xcell<=x_0+sigma_L_star*time){
-//
-//		(*this).SolExact_(cell,0)=rho0_L;
-//		(*this).SolExact_(cell,1)=u0_L;
-//		(*this).SolExact_(cell,2)=p0_L;
-//		(*this).SolExact_(cell,3)=Y0_L;
-//
-//	    }
-//	    else if(xcell<=x_0+u_star*time){
-//		//Inside the Left star region
-//
-//		(*this).SolExact_(cell,0)=rho_L_star;
-//		(*this).SolExact_(cell,1)=u_star;
-//		(*this).SolExact_(cell,2)=p_star;
-//		(*this).SolExact_(cell,3)=Y0_L;
-//
-//	    }
-//	    else if(xcell<=x_0+sigma_R_star*time){
-//
-//		(*this).SolExact_(cell,0)=rho_R_star;
-//		(*this).SolExact_(cell,1)=u_star;
-//		(*this).SolExact_(cell,2)=p_star;
-//		(*this).SolExact_(cell,3)=Y0_R;
-//
-//	    }
-//	    else if(xcell<=x_0+(u0_R+c0_R)*time){
-//		//Inside the Right rarefaction wave 
-//
-//		double X=xcell-x_0;
-//		Vector3d State_R_Fan=State_k_Fan(rho0_R, u0_R, p0_R, c0_R, \
-//			(*this).SolTherm_, 2, \
-//			X, time); 
-//
-//		(*this).SolExact_(cell,0)=State_R_Fan(0);
-//		(*this).SolExact_(cell,1)=State_R_Fan(1);
-//		(*this).SolExact_(cell,2)=State_R_Fan(2);
-//		(*this).SolExact_(cell,3)=Y0_R;
-//
-//	    }
-//	    else{
-//
-//		(*this).SolExact_(cell,0)=rho0_R;
-//		(*this).SolExact_(cell,1)=u0_R;
-//		(*this).SolExact_(cell,2)=p0_R;
-//		(*this).SolExact_(cell,3)=Y0_R;
-//	    }
-//
-//
-//	}
-//
-//    }
-//
-//}
-//
-//
-//void Sol::Compute_L1_err(Mesh& mesh){
-//
-// double SpaceStep=mesh.Get_SpaceStep();
-// int Ncells=mesh.Get_Ncells();
-//
-////Rho error:
-//
-// VectorXd Rho_disc(Ncells), Rho_exact(Ncells), Delta_Rho(Ncells), Rho_exact_abs(Ncells);
-// //Extracting the variable without the fictitious cells
-// Rho_disc=((*this).ConsVar_).block(1,0,Ncells,1);
-//
-// //Extracting the exact variable without the fictitious cells
-// Rho_exact=((*this).SolExact_).block(1,0,Ncells,1);
-// Rho_exact_abs=Rho_exact.array().abs();
-//
-// Delta_Rho=(Rho_disc-Rho_exact).array().abs();
-//
-// //norm L1 of rho exact
-// (*this).normL1_rho_exact_=SpaceStep*Rho_exact_abs.sum();
-//
-// //error in norm L1 of the variable
-// (*this).errL1_rho_=(SpaceStep*(Delta_Rho.sum()));
-//
-////U error:
-// 
-// VectorXd U_disc(Ncells), U_exact(Ncells), Delta_U(Ncells), U_exact_abs(Ncells);
-// //Extracting the variable without the fictitious cells
-// U_disc=((*this).NConsVar_).block(1,1,Ncells,1);
-//
-// //Extracting the exact variable without the fictitious cells
-// U_exact=((*this).SolExact_).block(1,1,Ncells,1);
-// U_exact_abs=U_exact.array().abs();
-//
-//// Delta_U=(U_disc).array().abs();
-//Delta_U=(U_disc-U_exact).array().abs(); 
-//
-// //norm L1 of u exact
-// (*this).normL1_u_exact_=SpaceStep*U_exact_abs.sum();
-//
-// //error in norm L1 of the variable
-// (*this).errL1_u_=(SpaceStep*(Delta_U.sum()));
-//
-////P error:
-//
-// VectorXd P_disc(Ncells), P_exact(Ncells), Delta_P(Ncells), P_exact_abs(Ncells);
-// //Extracting the variable without the fictitious cells
-// P_disc=((*this).NConsVar_).block(1,2,Ncells,1);
-//
-// //Extracting the exact variable without the fictitious cells
-// P_exact=((*this).SolExact_).block(1,2,Ncells,1);
-// P_exact_abs=P_exact.array().abs();
-//
-// //Delta_P=(P_disc).array().abs();
-// Delta_P=(P_disc-P_exact).array().abs(); 
-//
-// //norm L1 of p exact
-// (*this).normL1_p_exact_=SpaceStep*P_exact_abs.sum();
-//
-// //error in norm L1 of the variable
-// (*this).errL1_p_=(SpaceStep*(Delta_P.sum()));
-//
-////Y error:
-// 
-// VectorXd Y_disc(Ncells), Y_exact(Ncells), Delta_Y(Ncells), Y_exact_abs(Ncells);
-// //Extracting the variable without the fictitious cells
-// Y_disc=((*this).NConsVar_).block(1,3,Ncells,1);
-//
-// //Extracting the exact variable without the fictitious cells
-// Y_exact=((*this).SolExact_).block(1,3,Ncells,1);
-// Y_exact_abs=Y_exact.array().abs();
-//
-// Delta_Y=(Y_disc-Y_exact).array().abs();
-//
-// //norm L1 of Y exact
-// (*this).normL1_Y_exact_=SpaceStep*Y_exact_abs.sum();
-//
-// //error in norm L1 of the variable
-// (*this).errL1_Y_=(SpaceStep*(Delta_Y.sum()));
-//}
+void Sol::SoundSpeed_Update(){
+
+    //rho1, p1
+    VectorXd Rho = NConsVar_.col(1);
+    VectorXd P   = NConsVar_.col(3);
+
+    SoundSpeed_.col(0) = Sound_Speed_EOS_Tab(1, (*this).SolTherm_, Rho,P);                         
+    //rho2, p2
+    Rho = NConsVar_.col(4);
+    P   = NConsVar_.col(6);
+
+    SoundSpeed_.col(1) = Sound_Speed_EOS_Tab(2, (*this).SolTherm_, Rho,P);                         
+}
+
+void Sol::Mach_Update(){
+
+    //u1
+    VectorXd U   = NConsVar_.col(2);
+    Mach_.col(0) = U.cwiseQuotient(SoundSpeed_.col(0));                         
+
+    //u2
+    U   = NConsVar_.col(5);
+    Mach_.col(1) = U.cwiseQuotient(SoundSpeed_.col(1));                         
+}
+
+/*
+void Sol::ConsVar_Update( Mesh& mesh, double TimeStep, \
+        string SchemeType\
+        ){
+
+    //Mesh parameters:
+    int NcellExt=mesh.Get_NcellExt();
+    int Nfaces=mesh.Get_Nfaces();
+    int LeftBCface=mesh.Get_LeftBCface();
+    int RightBCface=mesh.Get_RightBCface();
+    double SpaceStep=mesh.Get_SpaceStep();
+    int L,R;
+
+    string LeftBCType=(*this).Get_LeftBCType();
+    string RightBCType=(*this).Get_RightBCType();
+
+    //For the JMH splitting conservative variables are classically updated
+    if(!(SchemeType1=="GIRARDIN" && SchemeType2=="GIRARDIN")){
+
+        for(int face_id=0; face_id<Nfaces; face_id++){ //Loop on all the faces, including these located at the boundaries
+
+
+            L=mesh.FaceIndex_(face_id,1); //Index of the cell located to the left
+            R=mesh.FaceIndex_(face_id,2); //Index of the cell located to the right
+
+            (*this).ConsVar_.row(L)+=-(TimeStep/SpaceStep)*(*this).ConsVarFlux_.row(face_id);
+            //Conservativity is ensured 
+            (*this).ConsVar_.row(R)-=-(TimeStep/SpaceStep)*(*this).ConsVarFlux_.row(face_id);
+
+        }
+
+        //Special treatment for boundary faces:
+
+        if(LeftBCType=="transparent"){
+
+            L=mesh.FaceIndex_(LeftBCface,1); //Index of the cell located to the left
+            R=mesh.FaceIndex_(LeftBCface,2); //Index of the cell located to the right
+            //The Fictitious Boundary State is set equal to the Physical State
+            (*this).ConsVar_.row(L)=(*this).ConsVar_.row(R); 
+        }
+        if(RightBCType=="transparent"){
+
+            L=mesh.FaceIndex_(RightBCface,1); //Index of the cell located to the left
+            R=mesh.FaceIndex_(RightBCface,2); //Index of the cell located to the right
+            //The Fictitious Boundary State is set equal to the Physical State
+            (*this).ConsVar_.row(R)=(*this).ConsVar_.row(L); 
+        }
+
+    }
+
+    //In the case Girardin's splitting and acoustic step
+    else if(SchemeType2=="GIRARDIN" && SplittingStep2==true){
+
+        //Loop on all the faces, including these located at the boundaries
+        for(int face_id=0; face_id<Nfaces; face_id++){ 
+
+            L=mesh.FaceIndex_(face_id,1); //Index of the cell located to the left
+            R=mesh.FaceIndex_(face_id,2); //Index of the cell located to the right
+
+            //building 1+delta_t/delta_x * (u_faceR- u_faceL)
+            (*this).NLGirardinOp_(L)+=(TimeStep/SpaceStep)*ConsVarFlux_(face_id,0);
+            (*this).NLGirardinOp_(R)-=(TimeStep/SpaceStep)*ConsVarFlux_(face_id,0);
+
+            //Momentum first update
+            (*this).ConsVar_(L,1)+=-(TimeStep/SpaceStep)*(*this).ConsVarFlux_(face_id,1);
+            (*this).ConsVar_(R,1)-=-(TimeStep/SpaceStep)*(*this).ConsVarFlux_(face_id,1);
+
+            //Energy first uppdate
+            (*this).ConsVar_(L,2)+=-(TimeStep/SpaceStep)*(*this).ConsVarFlux_(face_id,2);
+            (*this).ConsVar_(R,2)-=-(TimeStep/SpaceStep)*(*this).ConsVarFlux_(face_id,2);
+
+	    //No Update for mass fraction Y
+        }
+        //Loop on all cells, including these located on the boundaries
+        for (int cell_id=0; cell_id<NcellExt; cell_id++){
+
+            //Mass Update:
+            (*this).ConsVar_(cell_id,0)/=NLGirardinOp_(cell_id);
+            //Momentum Update:
+            (*this).ConsVar_(cell_id,1)/=NLGirardinOp_(cell_id);
+            //Energy Update:
+            (*this).ConsVar_(cell_id,2)/=NLGirardinOp_(cell_id);
+            //Y Update:
+            (*this).ConsVar_(cell_id,3)/=NLGirardinOp_(cell_id);
+
+        }
+
+        //Special treatment for boundary faces:
+
+        if(LeftBCType=="transparent"){
+
+            L=mesh.FaceIndex_(LeftBCface,1); //Index of the cell located to the left
+            R=mesh.FaceIndex_(LeftBCface,2); //Index of the cell located to the right
+            //The Fictitious Boundary State is set equal to the Physical State
+            (*this).ConsVar_.row(L)=(*this).ConsVar_.row(R); 
+        }
+        if(RightBCType=="transparent"){
+
+            L=mesh.FaceIndex_(RightBCface,1); //Index of the cell located to the left
+            R=mesh.FaceIndex_(RightBCface,2); //Index of the cell located to the right
+            //The Fictitious Boundary State is set equal to the Physical State
+            (*this).ConsVar_.row(R)=(*this).ConsVar_.row(L); 
+        }
+    }
+    //In the case Girardin's splitting and convective step
+    else if(SchemeType1=="GIRARDIN" && SplittingStep1==true){
+
+        //Loop on all cells, including these located on the boundaries
+        for (int cell_id=0; cell_id<NcellExt; cell_id++){
+
+            //Mass Update:
+            (*this).ConsVar_(cell_id,0)*=NLGirardinOp_(cell_id);
+            //Momentum Update:
+            (*this).ConsVar_(cell_id,1)*=NLGirardinOp_(cell_id);
+            //Energy Update:
+            (*this).ConsVar_(cell_id,2)*=NLGirardinOp_(cell_id);
+            //Y Update:
+            (*this).ConsVar_(cell_id,3)*=NLGirardinOp_(cell_id);
+
+
+        }
+        //Loop on all the faces, including these located at the boundaries
+        for(int face_id=0; face_id<Nfaces; face_id++){ 
+
+            L=mesh.FaceIndex_(face_id,1); //Index of the cell located to the left
+            R=mesh.FaceIndex_(face_id,2); //Index of the cell located to the right
+
+            (*this).ConsVar_.row(L)+=-(TimeStep/SpaceStep)*(*this).ConsVarFlux_.row(face_id);
+            //Conservativity is ensured 
+            (*this).ConsVar_.row(R)-=-(TimeStep/SpaceStep)*(*this).ConsVarFlux_.row(face_id);
+
+        }
+
+        //Special treatment for boundary faces:
+
+        if(LeftBCType=="transparent"){
+
+            L=mesh.FaceIndex_(LeftBCface,1); //Index of the cell located to the left
+            R=mesh.FaceIndex_(LeftBCface,2); //Index of the cell located to the right
+            //The Fictitious Boundary State is set equal to the Physical State
+            (*this).ConsVar_.row(L)=(*this).ConsVar_.row(R); 
+        }
+        if(RightBCType=="transparent"){
+
+            L=mesh.FaceIndex_(RightBCface,1); //Index of the cell located to the left
+            R=mesh.FaceIndex_(RightBCface,2); //Index of the cell located to the right
+            //The Fictitious Boundary State is set equal to the Physical State
+            (*this).ConsVar_.row(R)=(*this).ConsVar_.row(L); 
+        }
+    }
+}
+*/
+
+/*void Sol::NConsVar_Update(){
+
+    // rho update
+    (*this).NConsVar_.col(0)=(*this).ConsVar_.col(0);
+    VectorXd rho=(*this).ConsVar_.col(0);
+
+    // u update
+    (*this).NConsVar_.col(1)=(*this).ConsVar_.col(1).cwiseQuotient((*this).ConsVar_.col(0)); 
+    //Total energy by unit mass
+    VectorXd e_T=(*this).ConsVar_.col(2).cwiseQuotient((*this).ConsVar_.col(0));
+    //Kinetic energy by unit mass
+    VectorXd e_k=(ONE_OVER_TWO)*((*this).NConsVar_.col(1)).array().square();
+    //Internal energy by unit mass
+    VectorXd e=e_T-e_k;
+
+    //pressure update
+    VectorXd p=Pressure_EOS_Tab((*this).SolTherm_, rho, e);
+    (*this).NConsVar_.col(2)=p;
+
+    // Y update
+    (*this).NConsVar_.col(3)=(*this).ConsVar_.col(3).cwiseQuotient((*this).ConsVar_.col(0)); 
+}
+
+
+void Sol::SolExact_Update(Mesh& mesh, double time){
+
+    string SolType=(*this).SolType_;
+
+    double rho0_L=(*this).rho0_L_;
+    double rho0_R=(*this).rho0_R_;
+
+    double u0_L=(*this).u0_L_;
+    double u0_R=(*this).u0_R_;
+
+    double p0_L=(*this).p0_L_;
+    double p0_R=(*this).p0_R_;
+
+    double Y0_L=(*this).Y0_L_;
+    double Y0_R=(*this).Y0_R_;
+
+    double c0_L=(*this).c0_L_;
+    double c0_R=(*this).c0_R_;
+
+    //Double Riemann Problem
+    double rho_L_starstar, rho_R_starstar;
+    double p_starstar, u_starstar;
+    double c_L_starstar;
+    double sigma_L_starstar, sigma_R_starstar;
+    double rho0_interm;
+    double u0_interm  ;
+    double p0_interm  ;
+    double Y0_interm  ;
+    double c0_interm  ;
+    double x_1        ;
+
+    if((*this).Nbr_Areas_> 2){
+
+        rho0_interm = (*this).rho0_interm_;
+        u0_interm   = (*this).u0_interm_;
+        p0_interm   = (*this).p0_interm_;
+        Y0_interm   = (*this).Y0_interm_;
+        c0_interm   = (*this).c0_interm_;
+        x_1         = (*this).x_1_;
+
+    }
+
+    double xcell;
+    double x_0=(*this).x_0_;
+
+    int NcellExt     = mesh.Get_NcellExt();
+    double SpaceStep = mesh.Get_SpaceStep();
+
+    //Exact solution states:
+    double rho_L_star, rho_R_star;
+    double p_star, u_star;
+    double c_L_star, c_R_star;
+    double sigma_L_star, sigma_R_star; //Shock or Rarefaction wave velocities
+
+    if(SolType!="Pure Contact" && SolType!="Pure Shock" && SolType!="Pure Rarefaction" &&\
+	    SolType!="Sinus Impulse" && SolType!="Double Riemann Problem"){
+
+	//In the case of a pure contact discontinuity we don't need to compute p_star
+
+	double p_inf=ZERO;
+	double p_sup=HUNDRED*max(p0_L,p0_R);
+	p_star=P_Euler_Dichotomy(p_inf, p_sup, SolType, (*this).SolTherm_, rho0_L, rho0_R,\
+		u0_L, u0_R, p0_L, p0_R, c0_L, c0_R, epsDicho);
+    }
+
+    if (SolType=="Pure Contact"){
+	//The theoretical sol is maid of one contact discontinuity only
+	//its speed should be u=u0_L=u0_R
+
+	if(fabs(u0_L-u0_R)>epsZero){
+
+	    cout<<"Alert SolExact_Update: Pure Contact discontinuity but u0_L != u0_R"\
+		<<endl;
+	    exit(EXIT_FAILURE);
+	}
+
+	for (int cell=0; cell<NcellExt; cell++){
+
+	    xcell=mesh.CellCoordsTab_(cell,1);
+	    //cout<<"xcell= "<<xcell<<endl;
+	    cout<<"u0= "<<u0_L<<endl;
+	    cout<<"x_0+t*u0= "<<x_0+time*u0_L<<endl;
+
+	    if(xcell<=x_0+time*u0_L){
+
+		(*this).SolExact_(cell,0)=rho0_L;
+		(*this).SolExact_(cell,1)=u0_L;
+		(*this).SolExact_(cell,2)=p0_L;
+		(*this).SolExact_(cell,3)=Y0_L;
+
+	    }
+	    else{
+
+		(*this).SolExact_(cell,0)=rho0_R;
+		(*this).SolExact_(cell,1)=u0_R;
+		(*this).SolExact_(cell,2)=p0_R;
+		(*this).SolExact_(cell,3)=Y0_R;
+	    }
+
+
+	}
+
+    }
+    else if (SolType=="Pure Shock"){
+
+	//Shock Speed
+	double sigma=c0_L;
+
+	for (int cell=0; cell<NcellExt; cell++){
+
+	    xcell=mesh.CellCoordsTab_(cell,1);
+
+	    if(xcell<=x_0+time*sigma){
+
+		(*this).SolExact_(cell,0)=rho0_L;
+		(*this).SolExact_(cell,1)=u0_L;
+		(*this).SolExact_(cell,2)=p0_L;
+		(*this).SolExact_(cell,3)=Y0_L;
+
+	    }
+	    else{
+
+		(*this).SolExact_(cell,0)=rho0_R;
+		(*this).SolExact_(cell,1)=u0_R;
+		(*this).SolExact_(cell,2)=p0_R;
+		(*this).SolExact_(cell,3)=Y0_R;
+	    }
+
+	}
+
+    }
+    else if (SolType=="Pure Rarefaction"){
+
+	for (int cell=0; cell<NcellExt; cell++){
+
+	    xcell=mesh.CellCoordsTab_(cell,1);
+
+	    if(xcell<=x_0+time*(u0_L-c0_L)){
+
+		(*this).SolExact_(cell,0)=rho0_L;
+		(*this).SolExact_(cell,1)=u0_L;
+		(*this).SolExact_(cell,2)=p0_L;
+		(*this).SolExact_(cell,3)=Y0_L;
+
+	    }
+	    else if (xcell<=x_0+time*(u0_R-c0_R)){
+
+		double X=xcell-x_0;
+		Vector3d State_L_Fan=State_k_Fan(rho0_L, u0_L, p0_L, c0_L,\
+			(*this).SolTherm_, 1, \
+			X, time); 
+
+		(*this).SolExact_(cell,0)=State_L_Fan(0);
+		(*this).SolExact_(cell,1)=State_L_Fan(1);
+		(*this).SolExact_(cell,2)=State_L_Fan(2);
+		(*this).SolExact_(cell,3)=Y0_L;
+
+	    }
+	    else{
+
+		(*this).SolExact_(cell,0)=rho0_R;
+		(*this).SolExact_(cell,1)=u0_R;
+		(*this).SolExact_(cell,2)=p0_R;
+		(*this).SolExact_(cell,3)=Y0_R;
+	    }
+
+	}
+
+    }
+    else if (SolType=="Sinus Impulse"){
+
+	int    NPI_sin   = (*this).NPI_sin_;
+	int    NPI_gauss = (*this).NPI_gauss_;
+	double M0        = (*this).M0_;
+	double sigma = NPI_gauss * SpaceStep;
+	double k_c   = (TWO*Pi) / (NPI_sin*SpaceStep);
+
+	for (int cell=0; cell<NcellExt; cell++){
+
+	    xcell=mesh.CellCoordsTab_(cell,1);
+
+	    if(xcell<=x_0+time*u0_L){
+
+		(*this).SolExact_(cell,0)=\
+		rho0_L * (ONE + pow(M0, TWO) * sin(k_c * \
+			(xcell-(x_0+time*u0_L-k_c*Pi/TWO))) *\
+		    (ONE/(sigma*sqrt(TWO*Pi)))*\
+		    exp(-ONE_OVER_TWO * pow((xcell - (x_0+time*u0_L))/sigma, TWO)));
+
+		(*this).SolExact_(cell,1)=u0_L;
+		(*this).SolExact_(cell,2)=p0_L;
+		(*this).SolExact_(cell,3)=Y0_L;
+
+	    }
+	    else{
+
+		(*this).SolExact_(cell,0)=\
+		rho0_L * (ONE + pow(M0, TWO) * sin(k_c * \
+			(xcell-(x_0+time*u0_L-k_c*Pi/TWO))) *\
+		    (ONE/(sigma*sqrt(TWO*Pi)))*\
+		    exp(-ONE_OVER_TWO * pow((xcell - (x_0+time*u0_L))/sigma, TWO)));
+		(*this).SolExact_(cell,1)=u0_L;
+		(*this).SolExact_(cell,2)=p0_L;
+		(*this).SolExact_(cell,3)=Y0_R;
+	    }
+
+
+	}
+    }
+    else if (SolType=="Double Riemann Problem"){
+
+        string SubSolType = "Left Rarefaction Right Shock";
+
+        //1st Riemann Problem: p_star
+        double p_inf=ZERO;
+        double p_sup=HUNDRED*max(p0_L,p0_interm);
+        p_star=P_Euler_Dichotomy(p_inf, p_sup, SubSolType,\
+                (*this).SolTherm_,\
+                rho0_L, rho0_interm,\
+                u0_L, u0_interm,\
+                p0_L, p0_interm,\
+                c0_L, c0_interm, epsDicho);
+
+        //u star estimation
+        u_star=u0_L-Euler_k_Resolvant(p_star, (*this).SolTherm_, \
+                rho0_L, u0_L, p0_L, c0_L);
+
+        //Left quantities
+        rho_L_star=Rho_k_star_Resolvant(rho0_L, p0_L, p_star, (*this).SolTherm_);
+        c_L_star=C_k_star_Resolvant( c0_L, p0_L, p_star, (*this).SolTherm_);
+
+        sigma_L_star=u_star-c_L_star;
+
+        //Right quantities
+        rho_R_star=Rho_k_star_Resolvant(rho0_interm, p0_interm, p_star, (*this).SolTherm_);
+
+        sigma_R_star=Sigma_k_star_Resolvant(u0_interm, c0_interm, p0_interm, p_star,\
+                2, (*this).SolTherm_ );
+
+        //2nd Riemann Problem: p_starstar
+        p_inf=ZERO;
+        p_sup=HUNDRED*max(p0_interm,p0_R);
+        p_starstar=P_Euler_Dichotomy(p_inf, p_sup, SubSolType,\
+                (*this).SolTherm_,\
+                rho0_interm, rho0_R,\
+                u0_interm, u0_R,\
+                p0_interm, p0_R,\
+                c0_interm, c0_R, epsDicho);
+
+        //u starstar estimation
+        u_starstar=u0_interm-Euler_k_Resolvant(p_starstar, (*this).SolTherm_, \
+                rho0_interm, u0_interm, p0_interm, c0_interm);
+
+        //Left quantities
+        rho_L_starstar=Rho_k_star_Resolvant(rho0_interm, p0_interm, p_starstar, (*this).SolTherm_);
+        c_L_starstar=C_k_star_Resolvant( c0_interm, p0_interm, p_starstar, (*this).SolTherm_);
+
+        sigma_L_starstar=u_starstar-c_L_starstar;
+
+        //Right quantities
+        rho_R_starstar=Rho_k_star_Resolvant(rho0_R, p0_R, p_starstar, (*this).SolTherm_);
+
+        sigma_R_starstar=Sigma_k_star_Resolvant(u0_R, c0_R, p0_R, p_starstar,\
+                2, (*this).SolTherm_ );
+
+        for (int cell=0; cell<NcellExt; cell++){
+
+            xcell=mesh.CellCoordsTab_(cell,1);
+
+            if(xcell<=x_0+(u0_L-c0_L)*time){
+
+                (*this).SolExact_(cell,0)=rho0_L;
+                (*this).SolExact_(cell,1)=u0_L;
+                (*this).SolExact_(cell,2)=p0_L;
+                (*this).SolExact_(cell,3)=Y0_L;
+
+            }
+            else if(xcell<=x_0+sigma_L_star*time){
+                //Inside the Left Rarefaction wave
+
+                double X=xcell-x_0;
+                Vector3d State_L_Fan=State_k_Fan(rho0_L, u0_L, p0_L, c0_L,\
+                        (*this).SolTherm_, 1, \
+                        X, time); 
+
+                (*this).SolExact_(cell,0)=State_L_Fan(0);
+                (*this).SolExact_(cell,1)=State_L_Fan(1);
+                (*this).SolExact_(cell,2)=State_L_Fan(2);
+                (*this).SolExact_(cell,3)=Y0_L;
+
+            }
+            else if(xcell<=x_0+u_star*time){
+                //Inside the Left star region
+
+                (*this).SolExact_(cell,0)=rho_L_star;
+                (*this).SolExact_(cell,1)=u_star;
+                (*this).SolExact_(cell,2)=p_star;
+                (*this).SolExact_(cell,3)=Y0_L;
+
+            }
+            else if(xcell<=x_0+sigma_R_star*time){
+
+                (*this).SolExact_(cell,0)=rho_R_star;
+                (*this).SolExact_(cell,1)=u_star;
+                (*this).SolExact_(cell,2)=p_star;
+                (*this).SolExact_(cell,3)=Y0_interm;
+
+            }
+            else if(xcell<=x_1+(u0_interm-c0_interm)*time){
+
+                (*this).SolExact_(cell,0)=rho0_interm;
+                (*this).SolExact_(cell,1)=u0_interm;
+                (*this).SolExact_(cell,2)=p0_interm;
+                (*this).SolExact_(cell,3)=Y0_interm;
+
+            }
+            else if(xcell<=x_1+sigma_L_starstar*time){
+                //Inside the Left Rarefaction wave
+
+                double X=xcell-x_1;
+                Vector3d State_L_Fan=State_k_Fan(\
+                        rho0_interm, u0_interm,\
+                        p0_interm, c0_interm,\
+                        (*this).SolTherm_, 1, \
+                        X, time); 
+
+                (*this).SolExact_(cell,0)=State_L_Fan(0);
+                (*this).SolExact_(cell,1)=State_L_Fan(1);
+                (*this).SolExact_(cell,2)=State_L_Fan(2);
+                (*this).SolExact_(cell,3)=Y0_interm;
+
+            }
+            else if(xcell<=x_1+u_starstar*time){
+                //Inside the Left star region
+
+                (*this).SolExact_(cell,0)=rho_L_starstar;
+                (*this).SolExact_(cell,1)=u_starstar;
+                (*this).SolExact_(cell,2)=p_starstar;
+                (*this).SolExact_(cell,3)=Y0_interm;
+
+            }
+            else if(xcell<=x_1+sigma_R_starstar*time){
+
+                (*this).SolExact_(cell,0)=rho_R_starstar;
+                (*this).SolExact_(cell,1)=u_starstar;
+                (*this).SolExact_(cell,2)=p_starstar;
+                (*this).SolExact_(cell,3)=Y0_R;
+
+            }
+            else{
+
+                (*this).SolExact_(cell,0)=rho0_R;
+                (*this).SolExact_(cell,1)=u0_R;
+                (*this).SolExact_(cell,2)=p0_R;
+                (*this).SolExact_(cell,3)=Y0_R;
+            }
+
+        }
+    }
+
+    else if (SolType=="Left Rarefaction Right Rarefaction"){
+	//The theoretical sol is maid of 2 rarefaction waves
+
+	//u star estimation
+	u_star=u0_L-Euler_k_Resolvant(p_star, (*this).SolTherm_, \
+		rho0_L, u0_L, p0_L, c0_L);
+
+	//Left quantities
+	rho_L_star=Rho_k_star_Resolvant(rho0_L, p0_L, p_star, (*this).SolTherm_);
+	c_L_star=C_k_star_Resolvant( c0_L, p0_L, p_star, (*this).SolTherm_);
+
+	sigma_L_star=u_star-c_L_star;
+	
+	//Right quantities
+	rho_R_star=Rho_k_star_Resolvant(rho0_R, p0_R, p_star, (*this).SolTherm_);
+	c_R_star=C_k_star_Resolvant( c0_R, p0_R, p_star, (*this).SolTherm_);
+
+	sigma_R_star=u_star+c_R_star;
+
+	for (int cell=0; cell<NcellExt; cell++){
+
+	    xcell=mesh.CellCoordsTab_(cell,1);
+	    cout<<"xcell= "<<xcell<<endl;
+	    cout<<"u0= "<<u0_L<<endl;
+	    cout<<"x_0+t*u0= "<<x_0+time*u0_L<<endl;//
+
+	    if(xcell<=x_0+(u0_L-c0_L)*time){
+
+		(*this).SolExact_(cell,0)=rho0_L;
+		(*this).SolExact_(cell,1)=u0_L;
+		(*this).SolExact_(cell,2)=p0_L;
+		(*this).SolExact_(cell,3)=Y0_L;
+
+	    }
+	    else if(xcell<=x_0+sigma_L_star*time){
+		//Inside the Left Rarefaction wave
+
+		double X=xcell-x_0;
+		Vector3d State_L_Fan=State_k_Fan(rho0_L, u0_L, p0_L, c0_L,\
+			(*this).SolTherm_, 1, \
+			X, time); 
+
+		(*this).SolExact_(cell,0)=State_L_Fan(0);
+		(*this).SolExact_(cell,1)=State_L_Fan(1);
+		(*this).SolExact_(cell,2)=State_L_Fan(2);
+		(*this).SolExact_(cell,3)=Y0_L;
+
+	    }
+	    else if(xcell<=x_0+u_star*time){
+		//Inside the Left star region
+
+		(*this).SolExact_(cell,0)=rho_L_star;
+		(*this).SolExact_(cell,1)=u_star;
+		(*this).SolExact_(cell,2)=p_star;
+		(*this).SolExact_(cell,3)=Y0_L;
+
+	    }
+	    else if(xcell<=x_0+sigma_R_star*time){
+
+		(*this).SolExact_(cell,0)=rho_R_star;
+		(*this).SolExact_(cell,1)=u_star;
+		(*this).SolExact_(cell,2)=p_star;
+		(*this).SolExact_(cell,3)=Y0_R;
+
+	    }
+	    else if(xcell<=x_0+(u0_R+c0_R)*time){
+		//Inside the Right rarefaction wave 
+
+		double X=xcell-x_0;
+		Vector3d State_R_Fan=State_k_Fan(rho0_R, u0_R, p0_R, c0_R,\
+			(*this).SolTherm_, 2, \
+			X, time); 
+
+		(*this).SolExact_(cell,0)=State_R_Fan(0);
+		(*this).SolExact_(cell,1)=State_R_Fan(1);
+		(*this).SolExact_(cell,2)=State_R_Fan(2);
+		(*this).SolExact_(cell,3)=Y0_R;
+
+	    }
+	    else{
+
+		(*this).SolExact_(cell,0)=rho0_R;
+		(*this).SolExact_(cell,1)=u0_R;
+		(*this).SolExact_(cell,2)=p0_R;
+		(*this).SolExact_(cell,3)=Y0_R;
+	    }
+
+	}
+
+    }
+    else if (SolType=="Left Shock Right Shock"){
+	//The theoretical sol is maid of 2 shock waves
+
+	//u star estimation
+	u_star=u0_L-Euler_k_Resolvant(p_star, (*this).SolTherm_, \
+		rho0_L, u0_L, p0_L, c0_L);
+
+	//Left quantities
+	rho_L_star=Rho_k_star_Resolvant(rho0_L, p0_L, p_star, (*this).SolTherm_);
+	
+	sigma_L_star=Sigma_k_star_Resolvant(u0_L, c0_L, p0_L, p_star,\
+		1, (*this).SolTherm_ );
+
+	//Right quantities
+	rho_R_star=Rho_k_star_Resolvant(rho0_R, p0_R, p_star, (*this).SolTherm_);
+
+	sigma_R_star=Sigma_k_star_Resolvant(u0_R, c0_R, p0_R, p_star,\
+		2, (*this).SolTherm_ );
+
+	for (int cell=0; cell<NcellExt; cell++){
+
+
+	    xcell=mesh.CellCoordsTab_(cell,1);
+	    cout<<"xcell= "<<xcell<<endl;
+	    cout<<"u0= "<<u0_L<<endl;
+	    cout<<"x_0+t*u0= "<<x_0+time*u0_L<<endl;//
+
+	    if(xcell<=x_0+sigma_L_star*time){
+
+		(*this).SolExact_(cell,0)=rho0_L;
+		(*this).SolExact_(cell,1)=u0_L;
+		(*this).SolExact_(cell,2)=p0_L;
+		(*this).SolExact_(cell,3)=Y0_L;
+
+	    }
+	    else if(xcell<=x_0+u_star*time){
+
+		(*this).SolExact_(cell,0)=rho_L_star;
+		(*this).SolExact_(cell,1)=u_star;
+		(*this).SolExact_(cell,2)=p_star;
+		(*this).SolExact_(cell,3)=Y0_L;
+
+	    }
+	    else if(xcell<=x_0+sigma_R_star*time){
+
+		(*this).SolExact_(cell,0)=rho_R_star;
+		(*this).SolExact_(cell,1)=u_star;
+		(*this).SolExact_(cell,2)=p_star;
+		(*this).SolExact_(cell,3)=Y0_R;
+
+	    }
+	    else{
+
+		(*this).SolExact_(cell,0)=rho0_R;
+		(*this).SolExact_(cell,1)=u0_R;
+		(*this).SolExact_(cell,2)=p0_R;
+		(*this).SolExact_(cell,3)=Y0_R;
+	    }
+
+
+	}
+
+    }
+    else if (SolType=="Left Rarefaction Right Shock"){
+	//The theoretical sol is maid of 2 rarefaction waves
+
+	//u star estimation
+	u_star=u0_L-Euler_k_Resolvant(p_star, (*this).SolTherm_, \
+		rho0_L, u0_L, p0_L, c0_L);
+
+	//Left quantities
+	rho_L_star=Rho_k_star_Resolvant(rho0_L, p0_L, p_star, (*this).SolTherm_);
+	c_L_star=C_k_star_Resolvant( c0_L, p0_L, p_star, (*this).SolTherm_);
+
+	sigma_L_star=u_star-c_L_star;
+	
+	//Right quantities
+	rho_R_star=Rho_k_star_Resolvant(rho0_R, p0_R, p_star, (*this).SolTherm_);
+	
+	sigma_R_star=Sigma_k_star_Resolvant(u0_R, c0_R, p0_R, p_star,\
+		2, (*this).SolTherm_ );
+
+	for (int cell=0; cell<NcellExt; cell++){
+
+	    xcell=mesh.CellCoordsTab_(cell,1);
+	    cout<<"xcell= "<<xcell<<endl;
+	    cout<<"u0= "<<u0_L<<endl;
+	    cout<<"x_0+t*u0= "<<x_0+time*u0_L<<endl;//
+
+	    if(xcell<=x_0+(u0_L-c0_L)*time){
+
+		(*this).SolExact_(cell,0)=rho0_L;
+		(*this).SolExact_(cell,1)=u0_L;
+		(*this).SolExact_(cell,2)=p0_L;
+		(*this).SolExact_(cell,3)=Y0_L;
+
+	    }
+	    else if(xcell<=x_0+sigma_L_star*time){
+		//Inside the Left Rarefaction wave
+
+		double X=xcell-x_0;
+		Vector3d State_L_Fan=State_k_Fan(rho0_L, u0_L, p0_L, c0_L,\
+			(*this).SolTherm_, 1, \
+			X, time); 
+
+		(*this).SolExact_(cell,0)=State_L_Fan(0);
+		(*this).SolExact_(cell,1)=State_L_Fan(1);
+		(*this).SolExact_(cell,2)=State_L_Fan(2);
+		(*this).SolExact_(cell,3)=Y0_L;
+
+	    }
+	    else if(xcell<=x_0+u_star*time){
+		//Inside the Left star region
+
+		(*this).SolExact_(cell,0)=rho_L_star;
+		(*this).SolExact_(cell,1)=u_star;
+		(*this).SolExact_(cell,2)=p_star;
+		(*this).SolExact_(cell,3)=Y0_L;
+
+	    }
+	    else if(xcell<=x_0+sigma_R_star*time){
+
+		(*this).SolExact_(cell,0)=rho_R_star;
+		(*this).SolExact_(cell,1)=u_star;
+		(*this).SolExact_(cell,2)=p_star;
+		(*this).SolExact_(cell,3)=Y0_R;
+
+	    }
+	    else{
+
+		(*this).SolExact_(cell,0)=rho0_R;
+		(*this).SolExact_(cell,1)=u0_R;
+		(*this).SolExact_(cell,2)=p0_R;
+		(*this).SolExact_(cell,3)=Y0_R;
+	    }
+
+
+	}
+
+    }
+    else if (SolType=="Left Shock Right Rarefaction"){
+	//The theoretical sol is maid of 2 rarefaction waves
+
+	//u star estimation
+	u_star=u0_L-Euler_k_Resolvant(p_star, (*this).SolTherm_, \
+		rho0_L, u0_L, p0_L, c0_L);
+
+	//Left quantities
+	rho_L_star=Rho_k_star_Resolvant(rho0_L, p0_L, p_star, (*this).SolTherm_);
+	
+	sigma_L_star=Sigma_k_star_Resolvant(u0_L, c0_L, p0_L, p_star,\
+		1, (*this).SolTherm_ );
+
+	//Right quantities
+	rho_R_star=Rho_k_star_Resolvant(rho0_R, p0_R, p_star, (*this).SolTherm_);
+	c_R_star=C_k_star_Resolvant( c0_R, p0_R, p_star, (*this).SolTherm_);
+	
+	sigma_R_star=u_star+c_R_star;
+
+	for (int cell=0; cell<NcellExt; cell++){
+
+
+	    xcell=mesh.CellCoordsTab_(cell,1);
+	    cout<<"xcell= "<<xcell<<endl;
+	    cout<<"u0= "<<u0_L<<endl;
+	    cout<<"x_0+t*u0= "<<x_0+time*u0_L<<endl;//
+
+	    if(xcell<=x_0+sigma_L_star*time){
+
+		(*this).SolExact_(cell,0)=rho0_L;
+		(*this).SolExact_(cell,1)=u0_L;
+		(*this).SolExact_(cell,2)=p0_L;
+		(*this).SolExact_(cell,3)=Y0_L;
+
+	    }
+	    else if(xcell<=x_0+u_star*time){
+		//Inside the Left star region
+
+		(*this).SolExact_(cell,0)=rho_L_star;
+		(*this).SolExact_(cell,1)=u_star;
+		(*this).SolExact_(cell,2)=p_star;
+		(*this).SolExact_(cell,3)=Y0_L;
+
+	    }
+	    else if(xcell<=x_0+sigma_R_star*time){
+
+		(*this).SolExact_(cell,0)=rho_R_star;
+		(*this).SolExact_(cell,1)=u_star;
+		(*this).SolExact_(cell,2)=p_star;
+		(*this).SolExact_(cell,3)=Y0_R;
+
+	    }
+	    else if(xcell<=x_0+(u0_R+c0_R)*time){
+		//Inside the Right rarefaction wave 
+
+		double X=xcell-x_0;
+		Vector3d State_R_Fan=State_k_Fan(rho0_R, u0_R, p0_R, c0_R, \
+			(*this).SolTherm_, 2, \
+			X, time); 
+
+		(*this).SolExact_(cell,0)=State_R_Fan(0);
+		(*this).SolExact_(cell,1)=State_R_Fan(1);
+		(*this).SolExact_(cell,2)=State_R_Fan(2);
+		(*this).SolExact_(cell,3)=Y0_R;
+
+	    }
+	    else{
+
+		(*this).SolExact_(cell,0)=rho0_R;
+		(*this).SolExact_(cell,1)=u0_R;
+		(*this).SolExact_(cell,2)=p0_R;
+		(*this).SolExact_(cell,3)=Y0_R;
+	    }
+
+
+	}
+
+    }
+
+}
+
+
+void Sol::Compute_L1_err(Mesh& mesh){
+
+ double SpaceStep=mesh.Get_SpaceStep();
+ int Ncells=mesh.Get_Ncells();
+
+//Rho error:
+
+ VectorXd Rho_disc(Ncells), Rho_exact(Ncells), Delta_Rho(Ncells), Rho_exact_abs(Ncells);
+ //Extracting the variable without the fictitious cells
+ Rho_disc=((*this).ConsVar_).block(1,0,Ncells,1);
+
+ //Extracting the exact variable without the fictitious cells
+ Rho_exact=((*this).SolExact_).block(1,0,Ncells,1);
+ Rho_exact_abs=Rho_exact.array().abs();
+
+ Delta_Rho=(Rho_disc-Rho_exact).array().abs();
+
+ //norm L1 of rho exact
+ (*this).normL1_rho_exact_=SpaceStep*Rho_exact_abs.sum();
+
+ //error in norm L1 of the variable
+ (*this).errL1_rho_=(SpaceStep*(Delta_Rho.sum()));
+
+//U error:
+ 
+ VectorXd U_disc(Ncells), U_exact(Ncells), Delta_U(Ncells), U_exact_abs(Ncells);
+ //Extracting the variable without the fictitious cells
+ U_disc=((*this).NConsVar_).block(1,1,Ncells,1);
+
+ //Extracting the exact variable without the fictitious cells
+ U_exact=((*this).SolExact_).block(1,1,Ncells,1);
+ U_exact_abs=U_exact.array().abs();
+
+// Delta_U=(U_disc).array().abs();
+Delta_U=(U_disc-U_exact).array().abs(); 
+
+ //norm L1 of u exact
+ (*this).normL1_u_exact_=SpaceStep*U_exact_abs.sum();
+
+ //error in norm L1 of the variable
+ (*this).errL1_u_=(SpaceStep*(Delta_U.sum()));
+
+//P error:
+
+ VectorXd P_disc(Ncells), P_exact(Ncells), Delta_P(Ncells), P_exact_abs(Ncells);
+ //Extracting the variable without the fictitious cells
+ P_disc=((*this).NConsVar_).block(1,2,Ncells,1);
+
+ //Extracting the exact variable without the fictitious cells
+ P_exact=((*this).SolExact_).block(1,2,Ncells,1);
+ P_exact_abs=P_exact.array().abs();
+
+ //Delta_P=(P_disc).array().abs();
+ Delta_P=(P_disc-P_exact).array().abs(); 
+
+ //norm L1 of p exact
+ (*this).normL1_p_exact_=SpaceStep*P_exact_abs.sum();
+
+ //error in norm L1 of the variable
+ (*this).errL1_p_=(SpaceStep*(Delta_P.sum()));
+
+//Y error:
+ 
+ VectorXd Y_disc(Ncells), Y_exact(Ncells), Delta_Y(Ncells), Y_exact_abs(Ncells);
+ //Extracting the variable without the fictitious cells
+ Y_disc=((*this).NConsVar_).block(1,3,Ncells,1);
+
+ //Extracting the exact variable without the fictitious cells
+ Y_exact=((*this).SolExact_).block(1,3,Ncells,1);
+ Y_exact_abs=Y_exact.array().abs();
+
+ Delta_Y=(Y_disc-Y_exact).array().abs();
+
+ //norm L1 of Y exact
+ (*this).normL1_Y_exact_=SpaceStep*Y_exact_abs.sum();
+
+ //error in norm L1 of the variable
+ (*this).errL1_Y_=(SpaceStep*(Delta_Y.sum()));
+}
+
+*/
 
 //External functions:
 

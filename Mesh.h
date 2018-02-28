@@ -24,6 +24,7 @@ class Mesh
 	//(in CellCoordsTab_), the right cell neighbor row id (in CellCoordsTab_)
 	//and the x_face coordinate
         Eigen::MatrixXd FaceIndex_;    
+        Eigen::MatrixXd FaceIndexDual_;    
 			
 	//Dynamic matrix, each row stores 
 	//then the left face id , the right face id , for the left 

@@ -4,17 +4,18 @@
 
 Mesh::Mesh( double Length, int Ncells, int NGhostCells)
 {
-        Length_=Length;
-	Ncells_=Ncells;
-	int NcellExt=Ncells+NGhostCells;
-        NcellExt_=NcellExt;
-        int Nfaces=Ncells+1;
-        Nfaces_=Nfaces;
-        SpaceStep_=Length*ONE/Ncells;
+    Length_=Length;
+    Ncells_=Ncells;
+    int NcellExt=Ncells+NGhostCells;
+    NcellExt_=NcellExt;
+    int Nfaces=Ncells+1;
+    Nfaces_=Nfaces;
+    SpaceStep_=Length*ONE/Ncells;
 
-	FaceIndex_.resize(Nfaces,6);
-	CellCoordsTab_.resize(NcellExt,4);
-	CellIndex_.resize(NcellExt,3);
+    FaceIndex_.resize(Nfaces,6);
+    FaceIndexDual_.resize(Nfaces,6);
+    CellCoordsTab_.resize(NcellExt,4);
+    CellIndex_.resize(NcellExt,3);
 
 	for (int i=0; i< Nfaces; i++){
 
@@ -25,8 +26,14 @@ Mesh::Mesh( double Length, int Ncells, int NGhostCells)
 	    FaceIndex_(i,4)=ZERO; //y_face=0
 	    FaceIndex_(i,5)=ZERO; //z_face=0
 
-	}
+	    FaceIndexDual_(i,0)=i; //Face id is "i"
+	    FaceIndexDual_(i,1)=i; //Left neighbor id of face 'i' is i
+	    FaceIndexDual_(i,2)=i+1; //Right neighbor id of face 'i' is i+1
+	    FaceIndexDual_(i,3)=(i + ONE_OVER_TWO)*SpaceStep_; //x_face=(i+1/2)*SpaceStep_
+	    FaceIndexDual_(i,4)=ZERO; //y_face=0
+	    FaceIndexDual_(i,5)=ZERO; //z_face=0
 
+	}
 
 	for (int i=0; i< NcellExt; i++){
 
