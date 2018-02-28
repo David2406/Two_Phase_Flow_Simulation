@@ -680,7 +680,9 @@ void Solver_Isen::Save_Sol(string FileOutputFormat, string FileName,\
 
             file<<"x"<<" "<<"y"<<" "<<"z"<<" "\
                 <<"Alpha1"<<" "<<"P1"<<" "<<"U1"<<" "<<"P2"<<" "<<"U2"<<" "\
-                <<"U"<<" "<<"P"<<" "<<"dU"<<" "<<"dP"<<endl;
+                <<"U"<<" "<<"P"<<" "<<"dU"<<" "<<"dP"<<" "\
+                <<"Alpha1_ex"<<" "<<"P1_ex"<<" "<<"U1_ex"<<" "<<"P2_ex"<<" "<<"U2_ex"<<" "\
+                <<"U_ex"<<" "<<"P_ex"<<" "<<"dU_ex"<<" "<<"dP_ex"<<endl;
 
             //Writing values
             for (int i=0; i<NcellExt;i++){
@@ -695,7 +697,12 @@ void Solver_Isen::Save_Sol(string FileOutputFormat, string FileName,\
                     <<sol.NConsVar_(i,2)<<" "<<sol.NConsVar_(i,3)<<" "\
                     <<sol.NConsVar_(i,4)<<" "<<sol.NConsVarEqRelax_(i,1)<<" "\
                     <<sol.NConsVarEqRelax_(i,2)<<" "<<sol.NConsVarEqRelax_(i,3)<<" "\
-                    <<sol.NConsVarEqRelax_(i,4)<<endl;
+                    <<sol.NConsVarEqRelax_(i,4)<<" "\
+                    <<sol.SolExact_(i,0)<<" "<<sol.SolExact_(i,1)<<" "\
+                    <<sol.SolExact_(i,2)<<" "<<sol.SolExact_(i,3)<<" "\
+                    <<sol.SolExact_(i,4)<<" "<<sol.SolExactEqRelax_(i,1)<<" "\
+                    <<sol.SolExactEqRelax_(i,2)<<" "<<sol.SolExactEqRelax_(i,3)<<" "\
+                    <<sol.SolExactEqRelax_(i,4)<<endl;
             }
 
         }
