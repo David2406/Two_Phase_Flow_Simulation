@@ -10,10 +10,12 @@ using namespace std;
 using Eigen::VectorXd;
 using Eigen::Vector3d;
 using Eigen::MatrixXd;
+using Eigen::DiagonalMatrix;
 
 
 //For the isentropic 7 eqs model
 typedef Eigen::Matrix<double, 5, 1> Vector5d;
+typedef Eigen::Matrix< double , 1, 5 > RowVector5d;
 typedef Eigen::Matrix<double, 5, 5> Matrix5d;
 
 class Sol_Isen
@@ -32,6 +34,9 @@ class Sol_Isen
 
 	//The type of theoretical solution, ex: PURE_CONTACT    
 	string SolType_; 
+
+	//The type of theoretical variables, ex: ConsVar, NConsVar, EqRelaxVar    
+	string VariableType_; 
 
 	//Saving the initial variable values for the theoretical solution update
 	double x_0_;
@@ -59,7 +64,7 @@ class Sol_Isen
     double pRef_;
     double mRef_;
 
-	//Error in L1 norm for alpha1, rho1, u1, rho2, u2
+	//Error in L1 norm for alpha1, p1, u1, p2, u2
 	Vector5d errL1_;
 
 	//Norm L1 of the exact solutions (needed to understand CV curves)
@@ -87,6 +92,13 @@ class Sol_Isen
 	                        // column 5: u2     values
 
     //STAGGERED MESH
+	MatrixXd ConsVarDual_;//Dynamic matrix of 'NcellExt' rows and 5 columns:
+	                        // column 0:  alpha1             values
+	                        // column 1:  m1 = alpha1*rho1   values
+	                        // column 2:  m1*u1              values
+	                        // column 4:  m2 = alpha2*rho2   values
+	                        // column 5:  m2*u2              values
+
 	MatrixXd NConsVarDual_;//Dynamic matrix of 'NcellExt' rows and 5 columns: 
 	                        // column 0: alpha1 values
 	                        // column 1: p1     values 
@@ -95,6 +107,13 @@ class Sol_Isen
 	                        // column 5: u2     values
 
 	MatrixXd NConsVarEqRelax_;//Dynamic matrix of 'NcellExt' rows and 5 columns:
+	                        // column 0: alpha1 values
+	                        // column 1: U      values sum (m_k/m) u_k
+	                        // column 2: P      values sum alpha_k p_k
+	                        // column 4: du     values
+	                        // column 5: dp     values
+
+	MatrixXd NConsVarEqRelaxDual_;//Dynamic matrix of 'NcellExt' rows and 5 columns:
 	                        // column 0: alpha1 values
 	                        // column 1: U      values sum (m_k/m) u_k
 	                        // column 2: P      values sum alpha_k p_k
@@ -160,6 +179,7 @@ class Sol_Isen
 		ThermoLaw& Therm,\
         double pRef, double mRef,\
         Vector3d tauRelax,\
+        string VariableType,\
         Vector5d& InitL, Vector5d& InitR,\
 		string SolType,\
 		string LeftBCType, string RightBCType,\
@@ -193,16 +213,23 @@ class Sol_Isen
 	void Mach_Update();
 
     //Update NConsVar_ using the matrix ConsVar_
-    void ConsVarToNConsVar();
+    void ConsVarToNConsVar(string MeshTag);
 
     //Update NConsVarEqRelax_ using the matrix NConsVar_
-    void NConsVarToEqRelax();
+    void NConsVarToEqRelax(string MeshTag);
 
     //Update NConsVar_ using the matrix NConsVarEqRelax_
-    void EqRelaxToNConsVar();
+    void EqRelaxToNConsVar(string MeshTag);
 
     //Exact solutions update methods:
     void SolExact_Update(Mesh& mesh, double time);
+
+    //Compute the L1 error and the L1 norms of the exact solutions
+    void Compute_L1_err(Mesh& mesh);
+
+    //Checking methods
+    //Print the integral over the 1D domain of the conversative variable nVar
+    void Check_Conservativity(int nVar, Mesh& mesh);
 };
 
 //External functions
@@ -210,13 +237,20 @@ class Sol_Isen
 // Functions in front the source terms
 double Kp_Coeff(double p0, double alpha1);
 double Ku_Coeff(double m0, double alpha1);
+double Da1_Kp_Coeff(double p0, double alpha1);
+double Da1_Ku_Coeff(double m0, double alpha1);
 
 /************************************************/
 /*************  CHANGE OF VARIABLE  *************/
 /************************************************/
 
 // Local change of variable W_state = [a1, p1, u1, p2, u2] --> U_state =  [a1, m1, m1*u1, m2, m2*u2]
-Vector5d NConsVarToConsVar(Vector5d& W_state,\
+Vector5d NConsVarToConsVarLoc(Vector5d& W_state,\
+        ThermoLaw& Therm\
+        );
+
+// Local change of variable U_state = [a1, m1, m1u1, m2, m2u2] --> W_state =  [a1, p1, u1, p2, u2]
+Vector5d ConsVarToNConsVarLoc(Vector5d& U_state,\
         ThermoLaw& Therm\
         );
 
@@ -226,7 +260,7 @@ Vector5d NConsVarToEqRelaxLoc(Vector5d& W_state,\
         );
 
 // Local change of variable V_state = [a1, U, P, du, dp] --> W_state =  [a1, p1, u1, p2, u2]
-Vector5d EqRelaxToNConsVar(Vector5d& V_state,\
+Vector5d EqRelaxToNConsVarLoc(Vector5d& V_state,\
         ThermoLaw& Therm\
         );
 
@@ -239,8 +273,41 @@ Vector5d NConsVarAveraged(\
 /**********  BOUNDARY LAYER RESOLUTION  *********/
 /************************************************/
 
+/*%%%%%%%%%%  All Variables Functions %%%%%%%%%%*/
+
+//Returns the source term according to the choice of variables ConsVar, NConsVar, EqRelaxVar
+Vector5d SourceTerm(Vector5d& W_state,\
+        string VariableType,\
+        ThermoLaw& Therm,\
+        double pRef, double mRef,\
+        double etaP, double etaU\
+        );
+
+//Returns the gradient of the source term according to the choice of variables ConsVar, NConsVar, EqRelaxVar
+Matrix5d LinearizedSourceTerm(Vector5d& W_state,\
+        string VariableType,\
+        ThermoLaw& Therm,\
+        double pRef, double mRef,\
+        double etaP, double etaU\
+        );
+
+//Returns the jacobian matrix according to the choice of variables ConsVar, NConsVar, EqRelaxVar
+Matrix5d LinearizedJacobian(Vector5d& W_state,\
+        string VariableType,\
+        ThermoLaw& Therm\
+        );
+
+/*%%%%%%%%%%  EqRelax Variables %%%%%%%%%%*/
+
 // Return the gradient of the SourceTermsEqRelax column, taken at Equilibrium du = dp = 0
 Matrix5d LinearizedSourceTermsEq(Vector5d& W_state,\
+        ThermoLaw& Therm,\
+        double pRef, double mRef,\
+        double etaP, double etaU\
+        );
+
+// Return the gradient of the SourceTermsEqRelax column, contribution out of equilibrium du = dp = 0
+Matrix5d LinearizedSourceTermsOutOfEq(Vector5d& W_state,\
         ThermoLaw& Therm,\
         double pRef, double mRef,\
         double etaP, double etaU\
@@ -251,6 +318,21 @@ Matrix5d LinearizedJacobianEqRelax(Vector5d& W_state,\
         ThermoLaw& Therm\
         );
 
+/*%%%%%%%%%%  Conservative Variables %%%%%%%%%%*/
+
+// Return the gradient of the SourceTerms column
+Matrix5d LinearizedSourceTermsCons(Vector5d& W_state,\
+        ThermoLaw& Therm,\
+        double pRef, double mRef,\
+        double etaP, double etaU\
+        );
+
+// Return the Jacobian matrix related to the isentropic baer-nunziato flux expressed in ConsVar_ variables
+Matrix5d LinearizedJacobianCons(Vector5d& W_state,\
+        ThermoLaw& Therm\
+        );
+
+/*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%*/
 /************************************************/
 /**************  CONSERVATIVE FLUX  *************/
 /************************************************/
@@ -289,5 +371,105 @@ double PressureJumpFunction(\
 //Provided a left state W_L and a right alpha1_R, solves the 4 equations system based on the jump conditions of the u_I-wave
 Vector5d WstateContactResolution(Vector5d W_state_L, double alpha1_R,\
         ThermoLaw& Therm, double eps);
+
+//Returns the specific volume for which the PressureJumpFunction changes variations
+double TauUpperBoundPressureJumpFunction(int Phase_Id,\
+        double Jshock,\
+        ThermoLaw& Therm);
+
+//Returns the function related to the R-H momentum jump relations
+double  PressureRHJumpFunction(\
+        int Phase_Id,\
+        double Jshock,\
+        double tau_R,\
+        ThermoLaw& Therm);
+
+//Returns the density rho1_L involved in the Rankine-hugoniot jump conditions for the Euler
+//isentropic system
+double RHJumpConditionDichotomy(\
+        int& Phase_Id,\
+        double& tau_inf, double& tau_sup, ThermoLaw& Therm,\
+        Vector5d& W_state_R,\
+        double& Jshock,\
+        double& eps);
+
+//Returns the velocity u1_L involved in the momentum RH relation
+double VelocityRHJumpFunction(\
+        double Jshock,\
+        double tau_L,\
+        double tau_R, double u_R\
+        );
+
+//Provided a right state W_R , solves the 2 equations system based on R-H
+Vector5d WstateRHJumpCondition(\
+        Vector5d& W_state_R,\
+        double sigma1Shock, double sigma2Shock,\
+        ThermoLaw& Therm, double eps);
+
+
+//Returns the eigenvectors of the isentropic Baer Nunziato system
+Vector5d IsentropicBN_Eigenvalues(\
+                Vector5d& W_state_avr,\
+                ThermoLaw& Therm\
+                );
+
+//Returns the eigenvectors of the isentropic Baer Nunziato system according to the 
+//variable type
+Matrix5d IsentropicBN_Eigenvectors(\
+        string VariableType,\
+        Vector5d& W_state_avr,\
+        ThermoLaw& Therm\
+        );
+
+//Returns the eigenvectors of the isentropic Baer Nunziato system in conservative variables
+Matrix5d IsentropicBN_EigenvectorsCons(\
+        Vector5d& W_state_avr,\
+        ThermoLaw& Therm\
+        );
+
+//Returns the inverse of the eigen vector matrix for the isentropic Baer Nunziato system in conservative variables
+Matrix5d IsentropicBN_EigenvectorsInv(\
+        string VariableType,\
+        Vector5d& W_state_avr,\
+        ThermoLaw& Therm\
+        );
+
+//Returns the inverse of the eigen vector matrix for the isentropic Baer Nunziato system in conservative variables
+Matrix5d IsentropicBN_EigenvectorsInvCons(\
+        Vector5d& W_state_avr,\
+        ThermoLaw& Therm\
+        );
+
+//Returns the coordinates of X_R - X_L projected into the eigenvectors base
+//according to the variable type
+Vector5d IsentropicBN_EigenvectorsBaseProjection(\
+        string VariableType,\
+        Vector5d& W_state_avr,\
+        Vector5d& W_state_L, Vector5d& W_state_R,\
+        ThermoLaw& Therm\
+        );
+
+//Returns the coordinates of U_R - U_L projected into the eigenvectors base
+Vector5d IsentropicBN_EigenvectorsBaseProjectionCons(\
+        Vector5d& W_state_avr,\
+        Vector5d& W_state_L, Vector5d& W_state_R,\
+        ThermoLaw& Therm\
+        );
+
+//The Heaviside funtion
+double Heaviside(double x, double time, double lambda);
+
+//Returns the relaxation time matrix weighted by reference state (Cubic relaxation)
+Matrix5d TimeRelaxMat(Vector5d& U_state_ref, Vector5d& TimeWeight);
+
+//Returns the diagonal matrix of the vector R0^-1 * (U - Uinfty) taken to the square (Cubic relaxation)
+Matrix5d QuadraticDistance(Vector5d& A_coords);
+
+//Returns the inverse of the diagonal matrix of the vector R0^-1 * (U - Uinfty) taken to the square (Cubic relaxation)
+Matrix5d QuadraticDistanceInv(Matrix5d& TimeMat, Vector5d& A_coords, double dtRelax);
+
+//Returns the vector of the vector R0^-1 * (U - Uinfty) taken to the square (Cubic relaxation)
+Vector5d CubicVectorDistance(Vector5d& A_coords);
+
 
 #endif

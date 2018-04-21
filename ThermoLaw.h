@@ -91,7 +91,7 @@ VectorXd Sound_Speed_EOS_Tab(\
 double Pressure_EOS(\
         int PhaseId,\
         ThermoLaw& therm, \
-	    double rho, double e); 
+	    long double rho, long double e); 
 
 //EOS mesh tab of the pressure function of VectorXd rho and VectorXd e
 VectorXd Pressure_EOS_Tab(\
@@ -144,4 +144,15 @@ double Rho_EOS_ps(\
         ThermoLaw& therm, \
 	    double p, double s); 
 
+/*************** ISENTROPIC B-N RELAXATION ************/
+
+double Rho_Sound_Speed_Squared_EOS(\
+        int PhaseId,\
+        ThermoLaw& therm, \
+	    double rho, double p); 
+
+double Dp_Rho_Sound_Speed_Squared_EOS(\
+        int PhaseId,\
+        ThermoLaw& therm, \
+	    double rho, double p); 
 #endif

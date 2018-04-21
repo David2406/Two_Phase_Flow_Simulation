@@ -20,6 +20,7 @@ extern double ZERO;
 extern double ONE_OVER_TWO;
 extern double ONE;
 extern double TWO;
+extern double THREE;
 extern double FOUR;
 extern double EIGHT;
 extern double TEN;

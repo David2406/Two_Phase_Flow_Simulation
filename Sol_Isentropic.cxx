@@ -6,6 +6,7 @@ Sol_Isen::Sol_Isen(Mesh& M,\
 		ThermoLaw& Therm,\
         double pRef, double mRef,\
         Vector3d tauRelax,\
+        string VariableType,\
         Vector5d& InitL, Vector5d& InitR,\
 		string SolType,\
 		string LeftBCType, string RightBCType,\
@@ -23,6 +24,9 @@ Sol_Isen::Sol_Isen(Mesh& M,\
     double Length =M.Get_Length();
 
     x_0_ = x0;
+
+    //Copying the variable type
+    VariableType_ = VariableType;
 
     //Copying the initial Rieman state (theoretical solution)
     InitL_ = InitL;
@@ -53,9 +57,22 @@ Sol_Isen::Sol_Isen(Mesh& M,\
             Big,
             Big,
             Big;
+
+    //Initializing the L1 norms 
+    normL1_exact_<<ZERO,
+                   ZERO,
+                   ZERO,
+                   ZERO,
+                   ZERO;
     
     //Initializing the ConsVarDual_ to ZERO 
-    NConsVarDual_ = MatrixXd::Zero(NcellExt,5);
+    ConsVarDual_     = MatrixXd::Zero(NcellExt,5);
+
+    //Initializing the ConsVarDual_ to ZERO 
+    NConsVarDual_    = MatrixXd::Zero(NcellExt,5);
+
+    //Initializing the NConsVarEqRelaxDual_ to ZERO 
+    NConsVarEqRelaxDual_ = MatrixXd::Zero(NcellExt,5);
 
     //Initializing the conservative flux terms
     ConsVarFlux_ = MatrixXd::Zero(Nfaces,5);
@@ -74,15 +91,18 @@ Sol_Isen::Sol_Isen(Mesh& M,\
 
 Sol_Isen::Sol_Isen( Sol_Isen& solution){
 
-    LeftBCType_   =solution.LeftBCType_;
-    RightBCType_  =solution.RightBCType_;
+    LeftBCType_   = solution.LeftBCType_;
+    RightBCType_  = solution.RightBCType_;
+    VariableType_ = solution.VariableType_;
 
     SolTherm_=solution.SolTherm_;
 
     ConsVar_            = solution.ConsVar_;
+    ConsVarDual_        = solution.ConsVarDual_;
     NConsVar_           = solution.NConsVar_;
     NConsVarDual_       = solution.NConsVarDual_;
     NConsVarEqRelax_    = solution.NConsVarEqRelax_;
+    NConsVarEqRelaxDual_    = solution.NConsVarEqRelaxDual_;
     SoundSpeed_         = solution.SoundSpeed_;
     Mach_               = solution.Mach_;
     ConsVarFlux_        = solution.ConsVarFlux_;
@@ -285,7 +305,7 @@ void Sol_Isen::SoundSpeed_Update(){
     //rho2, p2
     P   = NConsVar_.col(3);
     Rho = Density_EOS_Tab(2, (*this).SolTherm_, P, ZeroTab);
-    SoundSpeed_.col(1) = Sound_Speed_EOS_Tab(2, (*this).SolTherm_, Rho,P);                        
+    SoundSpeed_.col(1) = Sound_Speed_EOS_Tab(2, (*this).SolTherm_, Rho,P);
 }
 
 void Sol_Isen::Mach_Update(){
@@ -296,10 +316,10 @@ void Sol_Isen::Mach_Update(){
 
     //u2
     U   = NConsVar_.col(4);
-    Mach_.col(1) = U.cwiseQuotient(SoundSpeed_.col(1));                         
+    Mach_.col(1) = U.cwiseQuotient(SoundSpeed_.col(1));                        
 }
 
-void Sol_Isen::NConsVarToEqRelax(){
+void Sol_Isen::NConsVarToEqRelax(string MeshTag){
 
     //local variables
     int nrows = NConsVar_.rows();
@@ -309,39 +329,77 @@ void Sol_Isen::NConsVarToEqRelax(){
     //Building the mass vectors m1, m2, m
     VectorXd ZeroTab = VectorXd::Zero(nrows);
 
-    VectorXd alpha1 = NConsVar_.col(0);
-    VectorXd alpha2 = VectorXd::Constant(nrows, ONE) - alpha1;
-    VectorXd p1   = NConsVar_.col(1);
-    VectorXd p2   = NConsVar_.col(3);
-    VectorXd u1   = NConsVar_.col(2);
-    VectorXd u2   = NConsVar_.col(4);
-    VectorXd rho1 = Density_EOS_Tab(1, SolTherm_, p1, ZeroTab);
-    VectorXd rho2 = Density_EOS_Tab(2, SolTherm_, p2, ZeroTab);
-    VectorXd m1  = alpha1.cwiseProduct(rho1);
-    VectorXd m2  = alpha2.cwiseProduct(rho2);
-    VectorXd m   = m1 + m2;
-    VectorXd Y1  = m1.cwiseQuotient(m); 
-    VectorXd Y2  = m2.cwiseQuotient(m); 
+    //Update using the Primal mesh values
+    if(MeshTag == "Primal"){
 
-    //alpha1
-    NConsVarEqRelax_.col(0)  = NConsVar_.col(0);
+        VectorXd alpha1 = NConsVar_.col(0);
+        VectorXd alpha2 = VectorXd::Constant(nrows, ONE) - alpha1;
+        VectorXd p1   = NConsVar_.col(1);
+        VectorXd p2   = NConsVar_.col(3);
+        VectorXd u1   = NConsVar_.col(2);
+        VectorXd u2   = NConsVar_.col(4);
+        VectorXd rho1 = Density_EOS_Tab(1, SolTherm_, p1, ZeroTab);
+        VectorXd rho2 = Density_EOS_Tab(2, SolTherm_, p2, ZeroTab);
+        VectorXd m1  = alpha1.cwiseProduct(rho1);
+        VectorXd m2  = alpha2.cwiseProduct(rho2);
+        VectorXd m   = m1 + m2;
+        VectorXd Y1  = m1.cwiseQuotient(m); 
+        VectorXd Y2  = m2.cwiseQuotient(m); 
 
-    //U
-    NConsVarEqRelax_.col(1)  = Y1.cwiseProduct(u1) +\
-                               Y2.cwiseProduct(u2);
-    //P
-    NConsVarEqRelax_.col(2)  = alpha1.cwiseProduct(p1)+\
-                               alpha2.cwiseProduct(p2);
+        //alpha1
+        NConsVarEqRelax_.col(0)  = NConsVar_.col(0);
 
-    //du
-    NConsVarEqRelax_.col(3) = u2 - u1;
+        //U
+        NConsVarEqRelax_.col(1)  = Y1.cwiseProduct(u1) +\
+                                   Y2.cwiseProduct(u2);
+        //P
+        NConsVarEqRelax_.col(2)  = alpha1.cwiseProduct(p1)+\
+                                   alpha2.cwiseProduct(p2);
 
-    //dp
-    NConsVarEqRelax_.col(4) = p2 - p1;
+        //du
+        NConsVarEqRelax_.col(3) = u2 - u1;
+
+        //dp
+        NConsVarEqRelax_.col(4) = p2 - p1;
+
+    }
+    //Update using the Dual mesh values
+    else{
+
+        VectorXd alpha1 = NConsVarDual_.col(0);
+        VectorXd alpha2 = VectorXd::Constant(nrows, ONE) - alpha1;
+        VectorXd p1   = NConsVarDual_.col(1);
+        VectorXd p2   = NConsVarDual_.col(3);
+        VectorXd u1   = NConsVarDual_.col(2);
+        VectorXd u2   = NConsVarDual_.col(4);
+        VectorXd rho1 = Density_EOS_Tab(1, SolTherm_, p1, ZeroTab);
+        VectorXd rho2 = Density_EOS_Tab(2, SolTherm_, p2, ZeroTab);
+        VectorXd m1  = alpha1.cwiseProduct(rho1);
+        VectorXd m2  = alpha2.cwiseProduct(rho2);
+        VectorXd m   = m1 + m2;
+        VectorXd Y1  = m1.cwiseQuotient(m); 
+        VectorXd Y2  = m2.cwiseQuotient(m); 
+
+        //alpha1
+        NConsVarEqRelaxDual_.col(0)  = NConsVarDual_.col(0);
+
+        //U
+        NConsVarEqRelaxDual_.col(1)  = Y1.cwiseProduct(u1) +\
+                                   Y2.cwiseProduct(u2);
+        //P
+        NConsVarEqRelaxDual_.col(2)  = alpha1.cwiseProduct(p1)+\
+                                   alpha2.cwiseProduct(p2);
+
+        //du
+        NConsVarEqRelaxDual_.col(3) = u2 - u1;
+
+        //dp
+        NConsVarEqRelaxDual_.col(4) = p2 - p1;
+    }
 
 }
 
-void Sol_Isen::ConsVarToNConsVar(){
+void Sol_Isen::ConsVarToNConsVar(string MeshTag){
 
     //local variables
     int nrows = NConsVar_.rows();
@@ -351,38 +409,74 @@ void Sol_Isen::ConsVarToNConsVar(){
     //Building the mass vectors m1, m2, m
     VectorXd ZeroTab = VectorXd::Zero(nrows);
 
-    VectorXd alpha1 = ConsVar_.col(0);
-    VectorXd alpha2 = VectorXd::Constant(nrows, ONE) - alpha1;
-    VectorXd m1     = ConsVar_.col(1);
-    VectorXd m2     = ConsVar_.col(3);
-    VectorXd m1u1   = ConsVar_.col(2);
-    VectorXd m2u2   = ConsVar_.col(4);
+    //Update using the Primal mesh values
+    if(MeshTag == "Primal"){
 
-    VectorXd rho1 = m1.cwiseQuotient(alpha1);
-    VectorXd rho2 = m2.cwiseQuotient(alpha2);
-    VectorXd p1 = Pressure_EOS_Tab(1, SolTherm_, rho1, ZeroTab);
-    VectorXd p2 = Pressure_EOS_Tab(2, SolTherm_, rho2, ZeroTab);
-    VectorXd u1 = m1u1.cwiseQuotient(m1);
-    VectorXd u2 = m2u2.cwiseQuotient(m2);
+        VectorXd alpha1 = ConsVar_.col(0);
+        VectorXd alpha2 = VectorXd::Constant(nrows, ONE) - alpha1;
+        VectorXd m1     = ConsVar_.col(1);
+        VectorXd m2     = ConsVar_.col(3);
+        VectorXd m1u1   = ConsVar_.col(2);
+        VectorXd m2u2   = ConsVar_.col(4);
 
-    //alpha1
-    NConsVar_.col(0)  = alpha1;
+        VectorXd rho1 = m1.cwiseQuotient(alpha1);
+        VectorXd rho2 = m2.cwiseQuotient(alpha2);
+        VectorXd p1 = Pressure_EOS_Tab(1, SolTherm_, rho1, ZeroTab);
+        VectorXd p2 = Pressure_EOS_Tab(2, SolTherm_, rho2, ZeroTab);
+        VectorXd u1 = m1u1.cwiseQuotient(m1);
+        VectorXd u2 = m2u2.cwiseQuotient(m2);
 
-    //p1
-    NConsVar_.col(1)  = p1;
+        //alpha1
+        NConsVar_.col(0)  = alpha1;
 
-    //u1
-    NConsVar_.col(2)  = u1;
+        //p1
+        NConsVar_.col(1)  = p1;
 
-    //p2
-    NConsVar_.col(3)  = p2;
+        //u1
+        NConsVar_.col(2)  = u1;
 
-    //u2
-    NConsVar_.col(4)  = u2;
+        //p2
+        NConsVar_.col(3)  = p2;
+
+        //u2
+        NConsVar_.col(4)  = u2;
+    }
+    //Update using the Dual mesh values
+    else{
+
+        VectorXd alpha1 = ConsVarDual_.col(0);
+        VectorXd alpha2 = VectorXd::Constant(nrows, ONE) - alpha1;
+        VectorXd m1     = ConsVarDual_.col(1);
+        VectorXd m2     = ConsVarDual_.col(3);
+        VectorXd m1u1   = ConsVarDual_.col(2);
+        VectorXd m2u2   = ConsVarDual_.col(4);
+
+        VectorXd rho1 = m1.cwiseQuotient(alpha1);
+        VectorXd rho2 = m2.cwiseQuotient(alpha2);
+        VectorXd p1 = Pressure_EOS_Tab(1, SolTherm_, rho1, ZeroTab);
+        VectorXd p2 = Pressure_EOS_Tab(2, SolTherm_, rho2, ZeroTab);
+        VectorXd u1 = m1u1.cwiseQuotient(m1);
+        VectorXd u2 = m2u2.cwiseQuotient(m2);
+
+        //alpha1
+        NConsVarDual_.col(0)  = alpha1;
+
+        //p1
+        NConsVarDual_.col(1)  = p1;
+
+        //u1
+        NConsVarDual_.col(2)  = u1;
+
+        //p2
+        NConsVarDual_.col(3)  = p2;
+
+        //u2
+        NConsVarDual_.col(4)  = u2;
+    }
 
 }
 
-void Sol_Isen::EqRelaxToNConsVar(){
+void Sol_Isen::EqRelaxToNConsVar(string MeshTag){
 
     //local variables
     int nrows = NConsVarEqRelax_.rows();
@@ -392,38 +486,78 @@ void Sol_Isen::EqRelaxToNConsVar(){
     //Building the mass vectors m1, m2, m
     VectorXd ZeroTab = VectorXd::Zero(nrows);
 
-    VectorXd alpha1 = NConsVarEqRelax_.col(0);
-    VectorXd alpha2 = VectorXd::Constant(nrows, ONE) - alpha1;
-    VectorXd U      = NConsVarEqRelax_.col(1);
-    VectorXd P      = NConsVarEqRelax_.col(2);
-    VectorXd du     = NConsVarEqRelax_.col(3);
-    VectorXd dp     = NConsVarEqRelax_.col(4);
+    //Update using the Primal mesh values
+    if(MeshTag == "Primal"){
 
-    VectorXd p1     = P - alpha2.cwiseProduct(dp);
-    VectorXd p2     = P + alpha1.cwiseProduct(dp);
+        VectorXd alpha1 = NConsVarEqRelax_.col(0);
+        VectorXd alpha2 = VectorXd::Constant(nrows, ONE) - alpha1;
+        VectorXd U      = NConsVarEqRelax_.col(1);
+        VectorXd P      = NConsVarEqRelax_.col(2);
+        VectorXd du     = NConsVarEqRelax_.col(3);
+        VectorXd dp     = NConsVarEqRelax_.col(4);
 
-    VectorXd rho1 = Density_EOS_Tab(1, SolTherm_, p1, ZeroTab);
-    VectorXd rho2 = Density_EOS_Tab(2, SolTherm_, p2, ZeroTab);
-    VectorXd m1  = alpha1.cwiseProduct(rho1);
-    VectorXd m2  = alpha2.cwiseProduct(rho2);
-    VectorXd m   = m1 + m2;
-    VectorXd Y1  = m1.cwiseQuotient(m); 
-    VectorXd Y2  = m2.cwiseQuotient(m); 
+        VectorXd p1     = P - alpha2.cwiseProduct(dp);
+        VectorXd p2     = P + alpha1.cwiseProduct(dp);
 
-    //alpha1
-    NConsVarEqRelax_.col(0)  = alpha1;
+        VectorXd rho1 = Density_EOS_Tab(1, SolTherm_, p1, ZeroTab);
+        VectorXd rho2 = Density_EOS_Tab(2, SolTherm_, p2, ZeroTab);
+        VectorXd m1  = alpha1.cwiseProduct(rho1);
+        VectorXd m2  = alpha2.cwiseProduct(rho2);
+        VectorXd m   = m1 + m2;
+        VectorXd Y1  = m1.cwiseQuotient(m); 
+        VectorXd Y2  = m2.cwiseQuotient(m); 
 
-    //p1
-    NConsVarEqRelax_.col(1)  = p1;
+        //alpha1
+        NConsVar_.col(0)  = alpha1;
 
-    //u1
-    NConsVarEqRelax_.col(2)  = U - Y2.cwiseProduct(du);
+        //p1
+        NConsVar_.col(1)  = p1;
 
-    //p2
-    NConsVarEqRelax_.col(3)  = p2;
+        //u1
+        NConsVar_.col(2)  = U - Y2.cwiseProduct(du);
 
-    //dp
-    NConsVarEqRelax_.col(4)  = U + Y1.cwiseProduct(du);
+        //p2
+        NConsVar_.col(3)  = p2;
+
+        //dp
+        NConsVar_.col(4)  = U + Y1.cwiseProduct(du);
+    }
+    //Update using the Dual mesh values
+    else{
+
+        VectorXd alpha1 = NConsVarEqRelaxDual_.col(0);
+        VectorXd alpha2 = VectorXd::Constant(nrows, ONE) - alpha1;
+        VectorXd U      = NConsVarEqRelaxDual_.col(1);
+        VectorXd P      = NConsVarEqRelaxDual_.col(2);
+        VectorXd du     = NConsVarEqRelaxDual_.col(3);
+        VectorXd dp     = NConsVarEqRelaxDual_.col(4);
+
+        VectorXd p1     = P - alpha2.cwiseProduct(dp);
+        VectorXd p2     = P + alpha1.cwiseProduct(dp);
+
+        VectorXd rho1 = Density_EOS_Tab(1, SolTherm_, p1, ZeroTab);
+        VectorXd rho2 = Density_EOS_Tab(2, SolTherm_, p2, ZeroTab);
+        VectorXd m1  = alpha1.cwiseProduct(rho1);
+        VectorXd m2  = alpha2.cwiseProduct(rho2);
+        VectorXd m   = m1 + m2;
+        VectorXd Y1  = m1.cwiseQuotient(m); 
+        VectorXd Y2  = m2.cwiseQuotient(m); 
+
+        //alpha1
+        NConsVarDual_.col(0)  = alpha1;
+
+        //p1
+        NConsVarDual_.col(1)  = p1;
+
+        //u1
+        NConsVarDual_.col(2)  = U - Y2.cwiseProduct(du);
+
+        //p2
+        NConsVarDual_.col(3)  = p2;
+
+        //dp
+        NConsVarDual_.col(4)  = U + Y1.cwiseProduct(du);
+    }
 
 }
 
@@ -462,9 +596,459 @@ void Sol_Isen::SolExact_Update(Mesh& mesh, double time){
         }
 
     }
+    else if(SolType_== "Shock Contact"){
+
+       double sigma1Shock =  -839.323232317123598;
+       double sigma2Shock =  -528.970548257695896;
+
+       double p1_star     = 5.e5;
+       double u1_star     = 5.e0;
+       double p2_star     = 3.e5;
+       double u2_star     = 4.e0;
+
+       Vector5d W_state1_star, W_state2_star;
+
+        for (int cell=0; cell<NcellExt; cell++){
+
+            xcell=mesh.CellCoordsTab_(cell,1);
+
+            if(xcell<=x_0_+time*sigma1Shock){
+
+                SolExact_.row(cell) = InitL_.transpose();
+                SolExactEqRelax_.row(cell) = SolExactEqRelax_L.transpose();
+
+            }
+            //after the shock wave of phase 1 
+            else if(xcell<=x_0_+time*sigma2Shock){
+
+                W_state1_star << InitL_(0),
+                              p1_star,
+                              u1_star,
+                              InitL_(3),
+                              InitL_(4);
+
+                SolExact_.row(cell) = W_state1_star.transpose();
+                SolExactEqRelax_.row(cell) = NConsVarToEqRelaxLoc(W_state1_star,\
+                                              SolTherm_).transpose();
+
+            }
+            //after the shock wave of phase 2 
+            else if(xcell<=x_0_+time*u2_star){
+
+                W_state2_star << InitL_(0),
+                              p1_star,
+                              u1_star,
+                              p2_star,
+                              u2_star;
+
+                SolExact_.row(cell)        = W_state2_star.transpose();
+                SolExactEqRelax_.row(cell) = NConsVarToEqRelaxLoc(W_state2_star,\
+                                              SolTherm_).transpose();
+            }
+            //After the contact discontinuity wave
+            else{
+
+                SolExact_.row(cell) = InitR_.transpose();
+                SolExactEqRelax_.row(cell) = SolExactEqRelax_R.transpose();
+            }
+
+
+        }
+
+    }
+    else if(SolType_== "Linear BN"){
+
+        double weight_L      = ONE_OVER_TWO;
+        Vector5d W_state_avr = NConsVarAveraged(InitL_, InitR_, weight_L);
+        Vector5d W_update, V_update;
+
+        Vector5d r_0, r_1, r_2, r_3, r_4;
+        double a_0, a_1, a_2, a_3, a_4;
+
+        Vector5d U_ini;
+
+        //Eigenvector base matrix
+        Matrix5d RmatEigenVectors = IsentropicBN_Eigenvectors(\
+                VariableType_,\
+                W_state_avr,\
+                SolTherm_\
+                );
+
+        //Coords of InitR_ - InitL_ in the eigenvector base
+        Vector5d CoordsEigenVectors = \
+            IsentropicBN_EigenvectorsBaseProjectionCons(\
+                     W_state_avr,\
+                     InitL_, InitR_,\
+                     SolTherm_);
+
+        //Ordering of the eigenvalues
+        int Index0, Index1, Index2, Index3, Index4;
+        Vector5d EigenValues = IsentropicBN_Eigenvalues(\
+                W_state_avr,\
+                SolTherm_\
+                );
+
+        //Test u1-c1 VS u2-c2
+        if (EigenValues(2)< EigenValues(4)){
+
+            Index0 = 2;
+            Index1 = 4;
+        }
+        else{
+
+            Index0 = 4;
+            Index1 = 2;
+        }
+        //Test u1+c1 VS u2+c2
+        if (EigenValues(1)< EigenValues(3)){
+
+            Index3 = 1;
+            Index4 = 3;
+        }
+        else{
+
+            Index3 = 3;
+            Index4 = 1;
+        }
+        //u2
+        Index2 = 0;
+
+        r_0 = RmatEigenVectors.col(Index0);
+        a_0 = CoordsEigenVectors(Index0);
+
+        r_1 = RmatEigenVectors.col(Index1);
+        a_1 = CoordsEigenVectors(Index1);
+        
+        r_2 = RmatEigenVectors.col(Index2);
+        a_2 = CoordsEigenVectors(Index2);
+        
+        r_3 = RmatEigenVectors.col(Index3);
+        a_3 = CoordsEigenVectors(Index3);
+        
+        r_4 = RmatEigenVectors.col(Index4);
+        a_4 = CoordsEigenVectors(Index4);
+
+        for (int cell=0; cell<NcellExt; cell++){
+
+            xcell=mesh.CellCoordsTab_(cell,1);
+            U_ini = NConsVarToConsVarLoc(InitL_,SolTherm_);
+
+            if(xcell<=x_0_+time*EigenValues(Index0)){
+
+            }
+            else if(xcell<=x_0_+time*EigenValues(Index1)){
+
+                U_ini = U_ini + a_0*r_0;
+            }
+            else if(xcell<=x_0_+time*EigenValues(Index2)){
+
+                U_ini = U_ini + a_0*r_0 + a_1*r_1;
+            }
+            else if(xcell<=x_0_+time*EigenValues(Index3)){
+
+                U_ini = U_ini + a_0*r_0 + a_1*r_1 + a_2*r_2;
+            }
+            else if(xcell<=x_0_+time*EigenValues(Index4)){
+
+                U_ini = U_ini + a_0*r_0 + a_1*r_1 + a_2*r_2 + a_3*r_3;
+            }
+            else{
+
+                U_ini = U_ini + a_0*r_0 + a_1*r_1 + a_2*r_2 + a_3*r_3 + a_4*r_4;
+            }
+
+            //Update of the solution
+            W_update = ConsVarToNConsVarLoc(U_ini, SolTherm_);
+            V_update = NConsVarToEqRelaxLoc(W_update, SolTherm_);
+
+            SolExact_.row(cell) = W_update.transpose();
+            SolExactEqRelax_.row(cell) = V_update.transpose(); 
+        }
+
+    }
+    else if(SolType_== "Linear Convection Relaxation BN"){
+
+        double weight_L      = ONE_OVER_TWO;
+        Vector5d W_state_avr = NConsVarAveraged(InitL_, InitR_, weight_L);
+        Vector5d U_update, W_update, V_update;
+
+        Vector5d ZeroTab = VectorXd::Zero(5);
+
+        //Time relaxation exponential operator
+        double mu_0 = HUNDRED;
+        double mu_1 = ONE;
+        double mu_2 = ONE;
+        double mu_3 = ONE;
+        double mu_4 = ONE;
+
+        //Asymptotic state
+
+        //Coords of U_inf in the eigenvector base
+        Vector5d U_infCoords = \
+            IsentropicBN_EigenvectorsBaseProjectionCons(\
+                     W_state_avr,\
+                     ZeroTab, InitR_,\
+                     SolTherm_);
+
+        U_infCoords(0) *= mu_0;
+        U_infCoords(1) *= mu_1;
+        U_infCoords(2) *= mu_2;
+        U_infCoords(3) *= mu_3;
+        U_infCoords(4) *= mu_4;
+
+        //Exponential time operator
+        double tau = etaRelax_(0);
+        Vector5d ExpTime;
+        ExpTime<<exp(-mu_0*(time/tau)),
+                 exp(-mu_1*(time/tau)),
+                 exp(-mu_2*(time/tau)),
+                 exp(-mu_3*(time/tau)),
+                 exp(-mu_4*(time/tau));
+        Vector5d EqTime;
+        EqTime<<(ONE - exp(-mu_0*(time/tau)))/mu_0,
+                (ONE - exp(-mu_1*(time/tau)))/mu_1,
+                (ONE - exp(-mu_2*(time/tau)))/mu_2,
+                (ONE - exp(-mu_3*(time/tau)))/mu_3,
+                (ONE - exp(-mu_4*(time/tau)))/mu_4;
+
+        //Eigenvector base matrix
+        Matrix5d RmatEigenVectors = IsentropicBN_Eigenvectors(\
+                VariableType_,\
+                W_state_avr,\
+                SolTherm_\
+                );
+
+        //Coords of InitR_ - InitL_ in the eigenvector base
+        Vector5d DeltaCoords = \
+            IsentropicBN_EigenvectorsBaseProjectionCons(\
+                     W_state_avr,\
+                     InitL_, InitR_,\
+                     SolTherm_);
+
+        //Coords of InitL_ in the eigenvector base
+        Vector5d InitLCoords = \
+            IsentropicBN_EigenvectorsBaseProjectionCons(\
+                     W_state_avr,\
+                     ZeroTab, InitL_,\
+                     SolTherm_);
+
+        //Vector5d W_test = RmatEigenVectors*InitLCoords;
+        //cout<<"Inside exact solution: "<<endl<<endl;
+        //cout<<ConsVarToNConsVarLoc(W_test, SolTherm_)<<endl;
+
+        //Heaviside function according to the eigenvalues
+        Vector5d H_Eigen;
+
+        //Ordering of the eigenvalues
+        Vector5d EigenValues = IsentropicBN_Eigenvalues(\
+                W_state_avr,\
+                SolTherm_\
+                );
+
+        //Result
+        Vector5d Result;
+
+        for (int cell=0; cell<NcellExt; cell++){
+
+            xcell=mesh.CellCoordsTab_(cell,1);
+            H_Eigen<<Heaviside(xcell-x_0_, time, EigenValues(0)),
+                     Heaviside(xcell-x_0_, time, EigenValues(1)),
+                     Heaviside(xcell-x_0_, time, EigenValues(2)),
+                     Heaviside(xcell-x_0_, time, EigenValues(3)),
+                     Heaviside(xcell-x_0_, time, EigenValues(4));
+
+            //cout<<"x_cell = "<<xcell<<endl<<endl;
+            //cout<<"H_Eigen"<<endl;
+            //cout<<H_Eigen<<endl<<endl;
+
+            Result = ExpTime.cwiseProduct(InitLCoords + DeltaCoords.cwiseProduct(H_Eigen)) +\
+                     EqTime.cwiseProduct(U_infCoords);
+
+            U_update = RmatEigenVectors*Result;
+
+            //Update of the solution
+            W_update = ConsVarToNConsVarLoc(U_update, SolTherm_);
+            V_update = NConsVarToEqRelaxLoc(W_update, SolTherm_);
+
+            SolExact_.row(cell) = W_update.transpose();
+            SolExactEqRelax_.row(cell) = V_update.transpose(); 
+        }
+
+    }
+    else if(SolType_== "Linear Convection Relaxation Cubic BN"){
+
+        double weight_L      = ONE_OVER_TWO;
+        Vector5d W_state_avr = NConsVarAveraged(InitL_, InitR_, weight_L);
+        Vector5d U_update, W_update, V_update;
+
+        //Used to compute the exact solution
+        double aCoordsIni, aInf;
+        Vector5d PureConvVector;
+
+        //Eigenvector base matrix
+        Matrix5d RmatEigenVectors = IsentropicBN_Eigenvectors(\
+                VariableType_,\
+                W_state_avr,\
+                SolTherm_\
+                );
+
+        //EigenvectorInv base matrix
+        Matrix5d RmatEigenVectorsInv = IsentropicBN_EigenvectorsInv(\
+                VariableType_,\
+                W_state_avr,\
+                SolTherm_\
+                );
+
+        //Reference state
+        Vector5d W_ref;
+        
+           W_ref<<0.5,
+           1.e5,
+           ONE,
+           3.e6,
+           ONE;
+
+        Vector5d U_state_ref = NConsVarToConsVarLoc(W_ref, SolTherm_);
+         
+        Vector5d aRef = U_state_ref;
+
+        //Exponential time operator
+        double tau = etaRelax_(0);
+
+        //Coords of InitR_ - InitL_ in the eigenvector base
+
+        Vector5d U_state_L = NConsVarToConsVarLoc(InitL_, SolTherm_);
+        Vector5d U_state_R = NConsVarToConsVarLoc(InitR_, SolTherm_);
+        Vector5d DeltaCoords = RmatEigenVectorsInv*(U_state_R - U_state_L);
+        Vector5d InitLCoords = RmatEigenVectorsInv*(U_state_L);
+        
+        Vector5d W_inf;
+        W_inf<<0.5,
+               3.e5,
+               6.,
+               4.e6,
+               -0.5;
+        
+        Vector5d U_state_inf = NConsVarToConsVarLoc(W_inf, SolTherm_);
+
+        Vector5d U_infCoords = RmatEigenVectorsInv*U_state_inf;
+
+        //Heaviside function according to the eigenvalues
+        Vector5d H_Eigen;
+
+        //Ordering of the eigenvalues
+        Vector5d EigenValues = IsentropicBN_Eigenvalues(\
+                W_state_avr,\
+                SolTherm_\
+                );
+
+        //Result
+        Vector5d Result;
+        Result<<ZERO,
+                ZERO,
+                ZERO,
+                ZERO,
+                ZERO;
+
+        for (int cell=0; cell<NcellExt; cell++){
+
+            xcell=mesh.CellCoordsTab_(cell,1);
+            H_Eigen<<Heaviside(xcell-x_0_, time, EigenValues(0)),
+                     Heaviside(xcell-x_0_, time, EigenValues(1)),
+                     Heaviside(xcell-x_0_, time, EigenValues(2)),
+                     Heaviside(xcell-x_0_, time, EigenValues(3)),
+                     Heaviside(xcell-x_0_, time, EigenValues(4));
+
+            PureConvVector = InitLCoords + DeltaCoords.cwiseProduct(H_Eigen);
+
+            for(int nVar=0;nVar<5;nVar++){
+
+                aCoordsIni   = PureConvVector(nVar);
+                aInf         = U_infCoords(nVar);
+
+                if(aCoordsIni < aInf){
+
+                Result(nVar) = aInf - ONE/sqrt( ONE/pow(aCoordsIni - aInf, TWO) + TWO*(time/tau)*(ONE/pow(aRef(nVar), TWO)));
+
+                }
+                else{
+
+                Result(nVar) = aInf + ONE/sqrt( ONE/pow(aCoordsIni - aInf, TWO) + TWO*(time/tau)*(ONE/pow(aRef(nVar), TWO)));
+
+                }
+
+            }
+
+            U_update = RmatEigenVectors*Result;
+
+            //Update of the solution
+            W_update = ConsVarToNConsVarLoc(U_update, SolTherm_);
+
+            V_update = NConsVarToEqRelaxLoc(W_update, SolTherm_);
+
+            SolExact_.row(cell) = W_update.transpose();
+            SolExactEqRelax_.row(cell) = V_update.transpose(); 
+
+        }
+
+    }
 
 }
 
+void Sol_Isen::Compute_L1_err(Mesh& mesh){
+
+    //Local variable
+    int NbVariables = 5;
+
+    //Function
+    double SpaceStep = mesh.Get_SpaceStep();
+    int Ncells       = mesh.Get_Ncells();
+
+    VectorXd Var_disc(Ncells), Var_exact(Ncells), Delta_Var(Ncells);
+    VectorXd Var_exact_abs(Ncells);
+
+    for (int nVar = 0; nVar< NbVariables; nVar++){
+
+        //Extracting the variable without the fictitious cells
+        Var_disc = (NConsVar_).block(1,nVar,Ncells,1);
+
+        //Extracting the exact variable without the fictitious cells
+        Var_exact     = (SolExact_).block(1,nVar,Ncells,1);
+        Var_exact_abs = Var_exact.array().abs();
+
+        Delta_Var = (Var_disc-Var_exact).array().abs();
+
+        //norm L1 of Var exact
+        normL1_exact_(nVar) = SpaceStep*Var_exact_abs.sum();
+
+        //error in norm L1 of the variable
+        errL1_(nVar) = (SpaceStep*(Delta_Var.sum()));
+    }
+
+}
+
+//Checking methods
+
+void Sol_Isen::Check_Conservativity(int nVar, Mesh& mesh){
+
+    //Local variable
+    int NcellExt         = mesh.Get_NcellExt();
+    double SpaceStep     = mesh.Get_SpaceStep();
+    double IntegratedVar = ZERO;
+
+    //Function
+
+    for(int icell =0; icell< NcellExt; icell++){
+
+        IntegratedVar += ConsVar_(icell,nVar);
+
+    }
+
+    IntegratedVar *= SpaceStep;
+
+    cout<<IntegratedVar<<endl;
+
+}
 
 //External functions:
 
@@ -488,12 +1072,23 @@ double Ku_Coeff(double m0, double alpha1){
     return alpha1*(ONE - alpha1)*m0;
 
 }
+double Da1_Kp_Coeff(double p0, double alpha1){
+
+    return (ONE - TWO*alpha1)/p0;
+
+}
+
+double Da1_Ku_Coeff(double m0, double alpha1){
+
+    return (ONE - TWO*alpha1)*m0;
+
+}
 
 /************************************************/
 /*************  CHANGE OF VARIABLE  *************/
 /************************************************/
 
-Vector5d NConsVarToConsVar(Vector5d& W_state,\
+Vector5d NConsVarToConsVarLoc(Vector5d& W_state,\
         ThermoLaw& Therm\
         ){
 
@@ -528,6 +1123,36 @@ Vector5d NConsVarToConsVar(Vector5d& W_state,\
 
 }
 
+Vector5d ConsVarToNConsVarLoc(Vector5d& U_state,\
+        ThermoLaw& Therm\
+        ){
+
+    Vector5d W_state;
+
+    //Local variables
+    double alpha1, alpha2, m1, m2, p1, p2, m1u1, m2u2;
+
+    //Function
+
+    alpha1   = U_state(0);
+    alpha2   = ONE - alpha1;
+    m1       = U_state(1);
+    m2       = U_state(3);
+    m1u1     = U_state(2);
+    m2u2     = U_state(4);
+
+    p1 = Pressure_EOS(1, Therm, m1/alpha1, ZERO);
+    p2 = Pressure_EOS(2, Therm, m2/alpha2, ZERO);
+
+    W_state(0) = alpha1;
+    W_state(1) = p1;
+    W_state(2) = m1u1/m1;
+    W_state(3) = p2;
+    W_state(4) = m2u2/m2;
+
+    return W_state;
+
+}
 
 Vector5d NConsVarToEqRelaxLoc(Vector5d& W_state,\
         ThermoLaw& Therm\
@@ -567,7 +1192,7 @@ Vector5d NConsVarToEqRelaxLoc(Vector5d& W_state,\
 
 }
 
-Vector5d EqRelaxToNConsVar(Vector5d& V_state,\
+Vector5d EqRelaxToNConsVarLoc(Vector5d& V_state,\
         ThermoLaw& Therm\
         ){
 
@@ -615,6 +1240,139 @@ Vector5d EqRelaxToNConsVar(Vector5d& V_state,\
 /**********  BOUNDARY LAYER RESOLUTION  *********/
 /************************************************/
 
+/*%%%%%%%%%%  All Variables Functions %%%%%%%%%%*/
+
+Vector5d SourceTerm(Vector5d& W_state,\
+        string VariableType,\
+        ThermoLaw& Therm,\
+        double pRef, double mRef,\
+        double etaP, double etaU\
+        ){
+
+    //Local variables
+    Vector5d SourceTerm;
+    double alpha1, rho1, p1, alpha2, rho2, p2;
+    double m1, m2, m, c1, c2, C1, C2;
+    double u1, u2;
+
+    double Coeff_du, Coeff_dp; 
+
+    //Function
+    alpha1 = W_state(0);
+    alpha2 = ONE - W_state(0);
+
+    p1   = W_state(1);
+    rho1 = Density_EOS(1, Therm, p1, ZERO);
+    c1   = Sound_Speed_EOS(1, Therm, rho1, p1);
+    p2   = W_state(3);
+    rho2 = Density_EOS(2, Therm, p2, ZERO);
+    c2   = Sound_Speed_EOS(2, Therm, rho2, p2);
+
+    u1   = W_state(2);
+    u2   = W_state(4);
+
+    m1 = alpha1*rho1;
+    m2 = alpha2*rho2;
+    m  = m1 + m2;
+    C1 = rho1*c1*c1; 
+    C2 = rho2*c2*c2; 
+
+    double du     = u2 - u1;
+    double dp     = p2 - p1;
+
+    Coeff_du = etaU*Ku_Coeff(mRef, alpha1); 
+    Coeff_dp = etaP*Kp_Coeff(pRef, alpha1);
+
+    if(VariableType=="EqRelaxVar"){
+
+        SourceTerm<< - Coeff_dp*dp,
+            ZERO,
+            Coeff_dp*(dp - (C2-C1))*dp,
+            - Coeff_du*(m/(m1*m2))*du,
+            - Coeff_dp*(C1/alpha1 + C2/alpha2)*dp;
+    }
+    else if(VariableType=="ConsVar"){
+
+        SourceTerm<< - Coeff_dp*dp,
+            ZERO,
+            Coeff_du*du,
+            ZERO,
+            -Coeff_du*du;
+    }
+
+    return SourceTerm;
+
+}
+
+Matrix5d LinearizedSourceTerm(Vector5d& W_state,\
+        string VariableType,\
+        ThermoLaw& Therm,\
+        double pRef, double mRef,\
+        double etaP, double etaU\
+        ){
+
+    //Local variables
+    Matrix5d SourceTermGradient;
+
+    //Function
+    if(VariableType=="EqRelaxVar"){
+
+        Matrix5d LinSourceTermEq = LinearizedSourceTermsEq(W_state,\
+                Therm,\
+                pRef, mRef,\
+                etaP, etaU);
+
+        Matrix5d LinSourceTermOutOfEq = LinearizedSourceTermsOutOfEq(W_state,\
+                Therm,\
+                pRef, mRef,\
+                etaP, etaU);
+
+        SourceTermGradient = LinSourceTermEq + LinSourceTermOutOfEq;
+
+    }
+    else if(VariableType=="ConsVar"){
+
+        SourceTermGradient = LinearizedSourceTermsCons(W_state,\
+                Therm,\
+                pRef, mRef,\
+                etaP, etaU\
+                );
+
+    }
+
+    return SourceTermGradient;
+
+}
+
+Matrix5d LinearizedJacobian(Vector5d& W_state,\
+        string VariableType,\
+        ThermoLaw& Therm\
+        ){
+
+    //Local variables
+    Matrix5d JacobianMatrix;
+
+    //Function
+    if(VariableType=="EqRelaxVar"){
+
+        JacobianMatrix = LinearizedJacobianEqRelax(W_state,\
+                Therm);
+
+    }
+    else if(VariableType=="ConsVar"){
+
+        JacobianMatrix = LinearizedJacobianCons(W_state,\
+                Therm\
+                );
+    }
+
+    return JacobianMatrix;
+
+}
+
+
+/*%%%%%%%%%%  EqRelax Variables %%%%%%%%%%*/
+
 Matrix5d LinearizedSourceTermsEq(Vector5d& W_state,\
         ThermoLaw& Therm,\
         double pRef, double mRef,\
@@ -659,6 +1417,86 @@ Matrix5d LinearizedSourceTermsEq(Vector5d& W_state,\
 
     return LinSouTerEq;
 
+}
+
+Matrix5d LinearizedSourceTermsOutOfEq(Vector5d& W_state,\
+        ThermoLaw& Therm,\
+        double pRef, double mRef,\
+        double etaP, double etaU\
+        ){
+
+    //
+    Matrix5d LinSouTerOutEq;
+    Matrix5d LinSouTerOutEqAlpha1Var;
+    Matrix5d LinSouTerOutEqThermoVar;
+
+    //Local variables
+    double alpha1, alpha2, rho1, rho2, p1, p2;
+    double m, m1, m2, c1, c2, C1, C2;
+    double C1p, C2p;
+
+    double Coeff_du, Coeff_dp;
+    double Da1_Coeff_du, Da1_Coeff_dp;
+    double du, dp;
+
+    //Function
+
+    alpha1 = W_state(0);
+    alpha2 = ONE - alpha1;
+    p1     = W_state(1);
+    p2     = W_state(3);
+    dp     = p2 - p1;
+    du     = W_state(4) - W_state(2);
+
+    rho1 = Density_EOS(1, Therm, p1, ZERO);
+    rho2 = Density_EOS(2, Therm, p2, ZERO);
+    c1 = Sound_Speed_EOS(1, Therm, rho1, p1);
+    c2 = Sound_Speed_EOS(2, Therm, rho2, p2);
+
+    m1 = alpha1*rho1;
+    m2 = alpha2*rho2;
+    m  = m1 + m2;
+    C1 = rho1*pow(c1,TWO);
+    C2 = rho2*pow(c2,TWO);
+    double dC = C2 - C1;
+
+    C1p = Dp_Rho_Sound_Speed_Squared_EOS(1, Therm, rho1, p1);
+    C2p = Dp_Rho_Sound_Speed_Squared_EOS(2, Therm, rho2, p2);
+
+    //Computing the thermodynamical variations
+    double Peq     = (alpha2*C1 + alpha1*C2)/(alpha1*alpha2);
+    double dC_da1  = dp*(C2p - C1p); 
+    double dC_dP   = (C2p - C1p); 
+    double dC_ddp  = (alpha1*C2p +  alpha2*C1p);
+
+    double dm_inv_da1  = ONE/(alpha2*m2) - ONE/(alpha1*m1) -dp*(ONE/(C1*m1) + ONE/(C2*m2)); 
+    double dm_inv_dP   =-(ONE/(C1*m1) + ONE/(C2*m2));
+    double dm_inv_ddp  =(alpha2/(C1*m1) - alpha1/(C2*m2));
+
+    double dCa_da1 = C2/(alpha2*alpha2) - C1/(alpha1*alpha1) +dp*(C1p/alpha1 + C2p/alpha2);
+    double dCa_dP  = (C1p/alpha1 + C2p/alpha2);
+    double dCa_ddp = (-(alpha2/alpha1)*C1p + (alpha1/alpha2)*C2p);
+
+    Coeff_du     = etaU*Ku_Coeff(mRef, alpha1); 
+    Coeff_dp     = etaP*Kp_Coeff(pRef, alpha1); 
+    Da1_Coeff_du = etaU*Da1_Ku_Coeff(mRef, alpha1); 
+    Da1_Coeff_dp = etaP*Da1_Kp_Coeff(pRef, alpha1); 
+
+    LinSouTerOutEqThermoVar<<ZERO, ZERO, ZERO, ZERO, ZERO,
+        ZERO, ZERO, ZERO, ZERO, ZERO,
+        -Coeff_dp*dp*dC_da1, ZERO, -Coeff_dp*dp*dC_dP, ZERO, -Coeff_dp*dp*dC_ddp,
+        -Coeff_du*du*dm_inv_da1, ZERO, -Coeff_du*du*dm_inv_dP, ZERO, -Coeff_du*du*dm_inv_ddp,
+        -Coeff_dp*dp*dCa_da1, ZERO, -Coeff_dp*dp*dCa_dP, ZERO, -Coeff_dp*dp*dCa_ddp;
+
+    LinSouTerOutEqAlpha1Var<<-Da1_Coeff_dp*dp, ZERO, ZERO, ZERO, ZERO,
+        ZERO, ZERO, ZERO, ZERO, ZERO,
+        Da1_Coeff_dp*dp*(dp - dC), ZERO, ZERO, ZERO, Da1_Coeff_dp*dp*TWO,
+        -Da1_Coeff_du*du*(m/(m1*m2)), ZERO, ZERO, ZERO, ZERO,
+        -Da1_Coeff_dp*dp*Peq, ZERO, ZERO, ZERO, ZERO;
+
+    LinSouTerOutEq = LinSouTerOutEqThermoVar + LinSouTerOutEqAlpha1Var;
+
+    return LinSouTerOutEq;
 }
 
 Matrix5d LinearizedJacobianEqRelax(Vector5d& W_state,\
@@ -775,6 +1613,157 @@ Matrix5d LinearizedJacobianEqRelax(Vector5d& W_state,\
     LinJacEqRel.col(4) = Col_dp;
 
     return LinJacEqRel;
+
+}
+
+/*%%%%%%%%%%  Conservative Variables %%%%%%%%%%*/
+
+Matrix5d LinearizedSourceTermsCons(Vector5d& W_state,\
+        ThermoLaw& Therm,\
+        double pRef, double mRef,\
+        double etaP, double etaU\
+        ){
+
+    //
+
+    //Local variables
+    double alpha1, alpha2, rho1, rho2, p1, p2;
+    double m1, m2, c1, c2, C1, C2;
+    double u1, u2;
+
+    double Coeff_du, Coeff_dp;
+    double lambda_dp;
+    double alpha12;
+    double du, dp;
+
+    //Function
+
+    int nVar = W_state.rows();
+    Matrix5d LinSouTerCons = MatrixXd::Zero(nVar,nVar);
+
+    alpha1  = W_state(0);
+    alpha2  = ONE - alpha1;
+    alpha12 = ONE - TWO*alpha1;
+    p1      = W_state(1);
+    p2      = W_state(3);
+    dp = p2 - p1;
+    u1      = W_state(2);
+    u2      = W_state(4);
+    du = u2 - u1;
+
+    rho1 = Density_EOS(1, Therm, p1, ZERO);
+    rho2 = Density_EOS(2, Therm, p2, ZERO);
+    c1 = Sound_Speed_EOS(1, Therm, rho1, p1);
+    c2 = Sound_Speed_EOS(2, Therm, rho2, p2);
+
+    m1 = alpha1*rho1;
+    m2 = alpha2*rho2;
+    C1 = rho1*pow(c1,TWO);
+    C2 = rho2*pow(c2,TWO);
+
+    Coeff_du = etaU*Ku_Coeff(mRef, alpha1); 
+    Coeff_dp = etaP*Kp_Coeff(pRef, alpha1); 
+
+    lambda_dp = Coeff_dp*( C1/alpha1 + C2/alpha2  );
+
+    //Filling the matrix row by row
+
+    //Row alpha1
+    Vector5d R_alpha1;
+    R_alpha1<<-(etaP/pRef)*alpha12*dp - lambda_dp,
+              Coeff_dp*(C1/m1),
+              ZERO,
+             -Coeff_dp*(C2/m2),
+              ZERO;
+
+    //Row m1 u1
+    Vector5d R_m1u1;
+    R_m1u1<< (etaU*mRef)*alpha12*du,
+              Coeff_du*(u1/m1),
+             -Coeff_du/m1,
+             -Coeff_du*(u2/m2),
+              Coeff_du/m2;
+
+    LinSouTerCons.row(0) = R_alpha1.transpose();
+    LinSouTerCons.row(2) = R_m1u1.transpose();
+    LinSouTerCons.row(4) = -R_m1u1.transpose();
+                 
+    return LinSouTerCons;
+
+}
+
+Matrix5d LinearizedJacobianCons(Vector5d& W_state,\
+        ThermoLaw& Therm\
+        ){
+
+    Matrix5d LinJacCons;
+
+    //Local variables
+    double rho1, rho2, p1, p2, dp;
+    double c1, c2, C1, C2;
+    double u1, u2;
+
+    //Function
+
+    p1     = W_state(1);
+    p2     = W_state(3);
+    dp     = p2 - p1;
+    u1     = W_state(2);
+    u2     = W_state(4);
+
+    rho1 = Density_EOS(1, Therm, p1, ZERO);
+    rho2 = Density_EOS(2, Therm, p2, ZERO);
+    c1 = Sound_Speed_EOS(1, Therm, rho1, p1);
+    c2 = Sound_Speed_EOS(2, Therm, rho2, p2);
+
+    C1 = rho1*pow(c1,TWO);
+    C2 = rho2*pow(c2,TWO);
+
+    //Filling each column of the jacobian
+    Vector5d Col_alpha1, Col_m1, Col_m1u1, Col_m2, Col_m2u2;
+
+    //col alpha1
+    Col_alpha1<<u2,
+                ZERO,
+                -C1,
+                ZERO,
+                -(dp - C2);
+
+    //col m1
+    Col_m1<<ZERO,
+            ZERO,
+            c1*c1 - u1*u1,
+            ZERO,
+            ZERO;
+
+    //col m1u1
+    Col_m1u1<<ZERO,
+              ONE,
+              TWO*u1,
+              ZERO,
+              ZERO;
+
+    //col m2
+    Col_m2<<ZERO,
+            ZERO,
+            ZERO,
+            ZERO,
+            c2*c2 - u2*u2;
+
+    //col m2u2
+    Col_m2u2<<ZERO,
+              ZERO,
+              ZERO,
+              ONE,
+              TWO*u2;
+
+    LinJacCons.col(0) = Col_alpha1;
+    LinJacCons.col(1) = Col_m1;
+    LinJacCons.col(2) = Col_m1u1;
+    LinJacCons.col(3) = Col_m2;
+    LinJacCons.col(4) = Col_m2u2;
+
+    return LinJacCons;
 
 }
 
@@ -902,6 +1891,7 @@ double EntropyJumpConditionDichotomy(\
 
 }
 
+
 double VelocityJumpFunction(\
         double alpha1_L, double rho1_L, double u1_L, double u2_L,\
         double alpha1_R, double rho1_R\
@@ -940,7 +1930,7 @@ Vector5d WstateContactResolution(Vector5d W_state_L, double alpha1_R,\
     double mL       = alpha1_L*rho1_L*(u1_L - u2_L);
 
     //Dichotomy on the subsonic branch
-    double rho_sup  = Rho1UpperBoundEntropyJumpFunction(mL, alpha1_R, Therm) - epsZero;
+    double rho_sup  = Rho1UpperBoundEntropyJumpFunction(mL, alpha1_R, Therm) + epsZero;
 
     //Entropy Jump Condition Resolution (rho1_R)
     double rho1_R = EntropyJumpConditionDichotomy(\
@@ -948,7 +1938,7 @@ Vector5d WstateContactResolution(Vector5d W_state_L, double alpha1_R,\
             W_state_L, alpha1_R,\
             epsDicho);
 
-    double p1_R = Pressure_EOS(1, Therm, rho1_R, ZERO); 
+    double p1_R = Pressure_EOS(1, Therm, rho1_R, ZERO);
 
     //Mass1 Jump Resolution (u1_R)
    double u1_R = VelocityJumpFunction(\
@@ -970,4 +1960,536 @@ Vector5d WstateContactResolution(Vector5d W_state_L, double alpha1_R,\
 
    return W_state_R;
 
+}
+
+double TauUpperBoundPressureJumpFunction(int Phase_Id,\
+        double Jshock,\
+        ThermoLaw& Therm){
+
+    //local variables
+    double kBAR, Gamma;
+
+    //Function
+    if(Phase_Id == 1){
+        kBAR  = Therm.kBAR1_;
+        Gamma = Therm.Gamma1_;
+    }
+    else{
+        kBAR  = Therm.kBAR2_;
+        Gamma = Therm.Gamma2_;
+    }
+
+    double tau_res = pow( ((Jshock*Jshock)/(Gamma*kBAR)), -ONE/(Gamma+ONE) );
+
+    return tau_res;
+
+}
+
+double PressureRHJumpFunction(\
+        int Phase_Id,\
+        double Jshock,\
+        double tau_R,\
+        ThermoLaw& Therm){
+
+    //local variables
+    double rho_R = ONE/tau_R;
+
+    return Jshock*Jshock*tau_R  + Pressure_EOS(Phase_Id, Therm, rho_R, ZERO);
+
+}
+
+double RHJumpConditionDichotomy(\
+        int& Phase_Id,\
+        double& tau_inf, double& tau_sup, ThermoLaw& Therm,\
+        Vector5d& W_state_R,\
+        double& Jshock,\
+        double& eps){
+
+    //Local variables
+    double p_R, tau_R;
+    double PR;
+    double Pinf, Pmid, Psup;
+           
+    //Function
+
+    //Initial density guess
+    double tau_star(ZERO);
+    double tau_mid  = (tau_inf + tau_sup)/TWO;
+
+
+    if(Phase_Id == 1){
+        p_R     = W_state_R(1);
+        tau_R   = ONE/Density_EOS(1, Therm, p_R, ZERO);
+        PR      = PressureRHJumpFunction(1, Jshock, tau_R, Therm);
+        Pinf    = PressureRHJumpFunction(1, Jshock, tau_inf, Therm) - PR;
+        Pmid    = PressureRHJumpFunction(1, Jshock, tau_mid, Therm) - PR;
+        Psup    = PressureRHJumpFunction(1, Jshock, tau_sup, Therm) - PR;
+    }
+    else{
+        p_R     = W_state_R(3);
+        tau_R   = ONE/Density_EOS(2, Therm, p_R, ZERO);
+        PR      = PressureRHJumpFunction(2, Jshock, tau_R, Therm);
+        Pinf    = PressureRHJumpFunction(2, Jshock, tau_inf, Therm) - PR;
+        Pmid    = PressureRHJumpFunction(2, Jshock, tau_mid, Therm) - PR;
+        Psup    = PressureRHJumpFunction(2, Jshock, tau_sup, Therm) - PR;
+    }
+    /*
+    cout<<"Inside RHJumpConditionDichotomy, p_in = "<<p_R<<endl;
+    cout<<"Inside RHJumpConditionDichotomy, tau_inf = "<<tau_inf<<", tau_R = "<<tau_R<<", tau_sup = "<<tau_sup<<endl;
+    cout<<"Inside RHJumpConditionDichotomy, P_inf   = "<<Pinf<<", P_R = "<<PR<<", P_sup = "<<Psup<<endl;
+*/
+
+
+    if(Pinf*Psup>= ZERO){
+
+	cout<<"Alert RHJumpConditionDichotomy: P(tau_inf) P(tau_sup) of same sign !"<<endl;
+	exit(EXIT_FAILURE);
+
+    }
+
+    else if(fabs(Pmid)<=eps){
+
+        return tau_mid;
+
+    }
+    else{
+
+        if(Pinf*Pmid<ZERO){
+
+            tau_star = RHJumpConditionDichotomy(\
+                    Phase_Id,\
+                    tau_inf, tau_mid, Therm,\
+                    W_state_R,\
+                    Jshock,\
+                    eps);
+        }
+        else {
+
+            tau_star = RHJumpConditionDichotomy(\
+                    Phase_Id,\
+                    tau_mid, tau_sup, Therm,\
+                    W_state_R,\
+                    Jshock,\
+                    eps);
+        }
+
+    }
+
+    return tau_star;
+}
+
+double VelocityRHJumpFunction(\
+        double Jshock,\
+        double tau_L,\
+        double tau_R, double u_R\
+        ){
+
+    return u_R - Jshock*( tau_R - tau_L );
+
+
+}
+
+Vector5d WstateRHJumpCondition(\
+        Vector5d& W_state_R,\
+        double sigma1Shock, double sigma2Shock,\
+        ThermoLaw& Therm, double eps){
+
+    //Local variables
+    double p_R, p_L, rho_R, tau_R, tau_L, u_R, u_L;
+    double Jshock, tau_inf;
+    Vector5d W_state_L;
+
+    //Function
+    double alpha_L  = W_state_R(0);
+    double tau_sup  = Big;
+
+    int Phase_Id = 1;
+
+    p_R      = W_state_R(1);
+    u_R      = W_state_R(2);
+    rho_R    = Density_EOS(1, Therm, p_R, ZERO);
+    tau_R    = ONE/rho_R;
+    Jshock   = rho_R*(u_R - sigma1Shock);
+    tau_inf  = TauUpperBoundPressureJumpFunction(Phase_Id, Jshock, Therm) + epsZero; 
+
+    tau_L   = RHJumpConditionDichotomy(Phase_Id,\
+            tau_inf, tau_sup, Therm,\
+            W_state_R,\
+            Jshock,\
+            eps);
+
+    p_L     = Pressure_EOS(Phase_Id, Therm, ONE/tau_L, ZERO);
+    u_L     = VelocityRHJumpFunction(Jshock, tau_L, tau_R, u_R);
+
+    W_state_L(0) = alpha_L;
+    W_state_L(1) = p_L;
+    W_state_L(2) = u_L;
+
+    Phase_Id = 2;
+
+    p_R      = W_state_R(3);
+    u_R      = W_state_R(4);
+    rho_R    = Density_EOS(2, Therm, p_R, ZERO);
+    tau_R    = ONE/rho_R;
+    Jshock   = rho_R*(u_R - sigma2Shock);
+    tau_inf  = TauUpperBoundPressureJumpFunction(Phase_Id, Jshock, Therm) + epsZero; 
+
+    cout<<"tau_inf = "<<tau_inf<<", tau_in = "<<tau_R<<", tau_in - tau_inf = "<<tau_R - tau_inf<<endl;
+
+    tau_L   = RHJumpConditionDichotomy(Phase_Id,\
+            tau_inf, tau_sup, Therm,\
+            W_state_R,\
+            Jshock,\
+            eps);
+
+    p_L     = Pressure_EOS(Phase_Id, Therm, ONE/tau_L, ZERO);
+    u_L     = VelocityRHJumpFunction(Jshock, tau_L, tau_R, u_R);
+
+    W_state_L(3) = p_L;
+    W_state_L(4) = u_L;
+
+    return W_state_L;
+
+}
+
+
+Vector5d IsentropicBN_Eigenvalues(\
+                Vector5d& W_state_avr,\
+                ThermoLaw& Therm\
+                ){
+
+    //Local variables
+    Vector5d EigenValues;
+    double rho1, p1, rho2, p2;
+    double c1, c2;
+    double u1, u2;
+
+    //Function
+    p1   = W_state_avr(1);
+    rho1 = Density_EOS(1, Therm, p1, ZERO);
+    c1   = Sound_Speed_EOS(1, Therm, rho1, p1);
+    p2   = W_state_avr(3);
+    rho2 = Density_EOS(2, Therm, p2, ZERO);
+    c2   = Sound_Speed_EOS(2, Therm, rho2, p2);
+
+    u1   = W_state_avr(2);
+    u2   = W_state_avr(4);
+
+    EigenValues<<u2,
+                 u1+c1,
+                 u1-c1,
+                 u2+c2,
+                 u2-c2;
+
+    return EigenValues;
+
+}
+
+Matrix5d IsentropicBN_Eigenvectors(\
+        string VariableType,\
+        Vector5d& W_state_avr,\
+        ThermoLaw& Therm\
+        ){
+
+    Matrix5d EigenVectorsBase;
+
+    if (VariableType=="ConsVar"){
+
+        EigenVectorsBase = IsentropicBN_EigenvectorsCons(\
+                W_state_avr,\
+                Therm\
+                ); 
+    }
+
+    return EigenVectorsBase;
+}
+
+Matrix5d IsentropicBN_EigenvectorsCons(\
+        Vector5d& W_state_avr,\
+        ThermoLaw& Therm\
+        ){
+
+    //Local variables
+    double rho1, p1, rho2, p2;
+    double c1, c2, C1, C2;
+    double u1, u2;
+
+    Matrix5d EigenVectorsBase;
+
+    //Function
+    p1   = W_state_avr(1);
+    rho1 = Density_EOS(1, Therm, p1, ZERO);
+    c1   = Sound_Speed_EOS(1, Therm, rho1, p1);
+    p2   = W_state_avr(3);
+    rho2 = Density_EOS(2, Therm, p2, ZERO);
+    c2   = Sound_Speed_EOS(2, Therm, rho2, p2);
+
+    u1   = W_state_avr(2);
+    u2   = W_state_avr(4);
+
+    C1 = rho1*c1*c1; 
+    C2 = rho2*c2*c2; 
+
+    double du     = u2 - u1;
+    double dp     = p2 - p1;
+
+    double res    = c1*c1 - du*du;
+    double Coeff1 = C1/res;
+    double Coeff2 = (dp - C2)/(c2*c2);
+
+    EigenVectorsBase<<ONE, ZERO , ZERO , ZERO , ZERO ,
+                     Coeff1, ONE ,ONE , ZERO , ZERO ,
+                     Coeff1*u2, (u1 + c1), (u1-c1) , ZERO, ZERO,
+                     Coeff2, ZERO , ZERO , ONE , ONE ,
+                     Coeff2*u2, ZERO , ZERO ,(u2+c2) ,(u2-c2);
+
+    return EigenVectorsBase;
+
+}
+
+Matrix5d IsentropicBN_EigenvectorsInv(\
+        string VariableType,\
+        Vector5d& W_state_avr,\
+        ThermoLaw& Therm\
+        ){
+
+    Matrix5d EigenVectorsBaseInv;
+
+    if (VariableType=="ConsVar"){
+
+        EigenVectorsBaseInv = IsentropicBN_EigenvectorsInvCons(\
+                W_state_avr,\
+                Therm\
+                ); 
+    }
+
+    return EigenVectorsBaseInv;
+}
+
+Matrix5d IsentropicBN_EigenvectorsInvCons(\
+        Vector5d& W_state_avr,\
+        ThermoLaw& Therm\
+        ){
+
+    //Local variables
+    Matrix5d EigenVectorsBaseInv;
+    double rho1, p1, rho2, p2;
+    double c1, c2, C1, C2;
+    double u1, u2;
+    double du, dp;
+
+    //Function
+
+    //Averaged quantities
+    p1   = W_state_avr(1);
+    rho1 = Density_EOS(1, Therm, p1, ZERO);
+    c1   = Sound_Speed_EOS(1, Therm, rho1, p1);
+    p2   = W_state_avr(3);
+    rho2 = Density_EOS(2, Therm, p2, ZERO);
+    c2   = Sound_Speed_EOS(2, Therm, rho2, p2);
+
+    u1   = W_state_avr(2);
+    u2   = W_state_avr(4);
+
+    C1 = rho1*c1*c1; 
+    C2 = rho2*c2*c2; 
+
+    du = u2 - u1;
+    dp = p2 - p1;
+
+    //Row alpha1
+
+    RowVector5d R_alpha1;
+    R_alpha1 << TWO, ZERO, ZERO, ZERO, ZERO;
+
+    //Row m1
+    double Ca1 = -(ONE/c1)*(C1/(c1-du));
+    double Cm  = -(u1-c1)/c1;
+    double Cmu = ONE/c1;
+
+    RowVector5d R_m1;
+    R_m1 << Ca1, Cm, Cmu, ZERO, ZERO;
+
+    //Row m1u1
+
+    Ca1 = -(ONE/c1)*(C1/(c1+du));
+    Cm  = (u1+c1)/c1;
+    Cmu = -ONE/c1;
+
+    RowVector5d R_m1u1;
+    R_m1u1 << Ca1, Cm, Cmu, ZERO, ZERO;
+
+    //Row m2
+
+    Ca1 = -(ONE/(c2*c2))*(dp - C2);
+    Cm  = -(u2-c2)/c2;
+    Cmu = ONE/c2;
+
+    RowVector5d R_m2;
+    R_m2 << Ca1, ZERO, ZERO, Cm, Cmu;
+
+    //Row m2u2
+
+    Ca1 = -(ONE/(c2*c2))*(dp - C2);
+    Cm  = (u2 + c2)/c2;
+    Cmu = -ONE/c2;
+
+    RowVector5d R_m2u2;
+    R_m2u2 << Ca1, ZERO, ZERO, Cm, Cmu;
+
+    //Building of the matrix
+    EigenVectorsBaseInv.row(0) = R_alpha1;
+    EigenVectorsBaseInv.row(1) = R_m1;
+    EigenVectorsBaseInv.row(2) = R_m1u1;
+    EigenVectorsBaseInv.row(3) = R_m2;
+    EigenVectorsBaseInv.row(4) = R_m2u2;
+
+    return ONE_OVER_TWO*EigenVectorsBaseInv;
+}
+
+Vector5d IsentropicBN_EigenvectorsBaseProjection(\
+        string VariableType,\
+        Vector5d& W_state_avr,\
+        Vector5d& W_state_L, Vector5d& W_state_R,\
+        ThermoLaw& Therm\
+        ){
+
+    Vector5d CoordsEigenVectorsBase;
+
+    if (VariableType=="ConsVar"){
+
+        CoordsEigenVectorsBase = IsentropicBN_EigenvectorsBaseProjectionCons(\
+                W_state_avr,\
+                W_state_L, W_state_R,\
+                Therm\
+                ); 
+    }
+
+    return CoordsEigenVectorsBase;
+}
+
+Vector5d IsentropicBN_EigenvectorsBaseProjectionCons(\
+        Vector5d& W_state_avr,\
+        Vector5d& W_state_L, Vector5d& W_state_R,\
+        ThermoLaw& Therm\
+        ){
+
+    //Local variables
+    Vector5d CoordsEigenVectorsBase;
+    double rho1, p1, rho2, p2;
+    double c1, c2, C1, C2;
+    double u1, u2;
+
+    //Function
+
+    //U_R - U_L
+    Vector5d U_R = NConsVarToConsVarLoc(W_state_R, Therm);
+    Vector5d U_L = NConsVarToConsVarLoc(W_state_L, Therm);
+    Vector5d dU = U_R - U_L;
+
+    //Averaged quantities
+    p1   = W_state_avr(1);
+    rho1 = Density_EOS(1, Therm, p1, ZERO);
+    c1   = Sound_Speed_EOS(1, Therm, rho1, p1);
+    p2   = W_state_avr(3);
+    rho2 = Density_EOS(2, Therm, p2, ZERO);
+    c2   = Sound_Speed_EOS(2, Therm, rho2, p2);
+
+    u1   = W_state_avr(2);
+    u2   = W_state_avr(4);
+
+    C1 = rho1*c1*c1; 
+    C2 = rho2*c2*c2; 
+
+    double du     = u2 - u1;
+    double dp     = p2 - p1;
+
+    //Row alpha1, m1
+
+    double Ca1 = -(ONE/c1)*(C1/(c1-du));
+    double Cm  = -(u1-c1)/c1;
+    double Cmu = ONE/c1;
+
+    CoordsEigenVectorsBase(0) = TWO*dU(0);
+    CoordsEigenVectorsBase(1) = Ca1*dU(0) + Cm*dU(1) + Cmu*dU(2);
+
+    //Row m1u1
+
+    Ca1 = -(ONE/c1)*(C1/(c1+du));
+    Cm  = (u1+c1)/c1;
+    Cmu = -ONE/c1;
+
+    CoordsEigenVectorsBase(2) = Ca1*dU(0) + Cm*dU(1) + Cmu*dU(2);
+
+    //Row m2
+
+    Ca1 = -(ONE/(c2*c2))*(dp - C2);
+    Cm  = -(u2-c2)/c2;
+    Cmu = ONE/c2;
+
+    CoordsEigenVectorsBase(3) = Ca1*dU(0) + Cm*dU(3) + Cmu*dU(4);
+
+    //Row m2u2
+
+    Ca1 = -(ONE/(c2*c2))*(dp - C2);
+    Cm  = (u2 + c2)/c2;
+    Cmu = -ONE/c2;
+
+    CoordsEigenVectorsBase(4) = Ca1*dU(0) + Cm*dU(3) + Cmu*dU(4);
+
+    return ONE_OVER_TWO*CoordsEigenVectorsBase;
+}
+
+double Heaviside(double x, double time, double lambda){
+
+    //Local variables
+
+    //Function
+    if(x <= lambda*time){
+
+        return ZERO;
+    }
+    else{
+
+        return ONE;
+    }
+
+    return Big;
+}
+
+Matrix5d TimeRelaxMat(Vector5d& U_state_ref, Vector5d& TimeWeight){
+
+    Vector5d Result = TimeWeight.cwiseQuotient(U_state_ref.cwiseProduct(U_state_ref));
+    Matrix5d RelaxDiagMat = DiagonalMatrix<double, 5>(Result); 
+
+    return RelaxDiagMat;
+}
+
+Matrix5d QuadraticDistance(Vector5d& A_coords){
+
+    Matrix5d DistanceDiagMat = DiagonalMatrix<double, 5>(A_coords); 
+
+    return DistanceDiagMat*DistanceDiagMat;
+}
+
+Matrix5d QuadraticDistanceInv(Matrix5d& TimeMat, Vector5d& A_coords, double dtRelax){
+
+    //Local variables
+    int nrows = A_coords.rows();
+    Vector5d One = VectorXd::Constant(nrows, ONE);
+    Vector5d A_coords_sq  = A_coords.cwiseProduct(A_coords);
+
+    //Function
+
+    Vector5d A_coords_inv = ((One+THREE*dtRelax*TimeMat*A_coords_sq).array()).pow(-ONE);
+    Matrix5d DistanceDiagMat = DiagonalMatrix<double, 5>(A_coords_inv); 
+
+    return DistanceDiagMat;
+}
+
+Vector5d CubicVectorDistance(Vector5d& A_coords){
+
+    Vector5d DistanceDiagMat = ((A_coords).array()).pow(THREE); 
+
+    return DistanceDiagMat;
 }

@@ -3,6 +3,7 @@
 #include <Eigen/Sparse>
 #include <Eigen/SparseLU>
 #include <Eigen/Dense>
+#include <Eigen/Eigenvalues> 
 #include <vector>
 #include "Mesh.h"
 #include "ThermoLaw.h"
@@ -17,9 +18,13 @@
 using namespace std;
 using Eigen::Array;
 using Eigen::VectorXd;
+using Eigen::VectorXcd;
+using Eigen::MatrixXcd;
+using Eigen::ComplexEigenSolver;
 using Eigen::Vector3d; //For the function Compute_k_Star_State
 using Eigen::MatrixXd;
 using Eigen::SparseLU; //For acoustic implicitation
+using Eigen::DiagonalMatrix;
 
 //Defining a type for sparse matrix used for acoustic implicitation
 typedef Eigen::SparseMatrix<double> SpMat; 
@@ -27,6 +32,7 @@ typedef Eigen::SparseMatrix<double> SpMat;
 //Defining a type for matrix double 4 by 4
 typedef Eigen::Matrix<double, 4, 4> Matrix4d;
 typedef Eigen::Matrix<double, 4, 1> Vector4d;
+typedef Eigen::Matrix<double, 2, 1> Vector2d;
 
 //Defining a type for triplets used for acoustic implicitation
 typedef Eigen::Triplet<double> T;
@@ -37,7 +43,10 @@ class Solver_Isen
 {
     private:
 
+
     public:
+ 
+        string FileOutputFormat_;
 
         /************************************************/
         /***************  BOUNDARY LAYER  ***************/
@@ -59,13 +68,18 @@ class Solver_Isen
         //Convective Time-step
         double TimeStep_;
 
+        //Discrete time-steps at face face_id
+        MatrixXd TimeMatrix_;
+
         //Courant number for the convection step
         double CourantConv_;
 
 
         //Time of the Simulation
         double SimulationTime_;
+        double TimeElapsed_;
         int print_freq_;
+        double CPUTime_;
 
         //Numerical scheme for the conservative flux
         string SchemeTypeCons_;
@@ -74,11 +88,13 @@ class Solver_Isen
         string SchemeTypeNCons_;
 
         //constructor:
-        Solver_Isen( double dtRelax,\
+        Solver_Isen(\
                 int NRelax, double CourantBL,\
                 string SchemeTypeCons, string SchemeTypeNCons,\
-                double TimeStep, double CourantConv,\
-                double SimulationTime, int print_freq\
+                double CourantConv,\
+                double SimulationTime, int print_freq,\
+                string FileOutputFormat,\
+                int Nfaces\
                 );
 
         //constructor by copy:
@@ -97,12 +113,21 @@ class Solver_Isen
         void BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,\
                 double dtRelax, int NRelax\
                 );
+        void BoundaryLayerUpdateTest(Sol_Isen& sol, Mesh& mesh, string MeshTag,\
+                double& dtRelax, double& dtRelax_estim, string VariableType);
+
+        //Resolution of the time boundary layer related to the relaxation processes
+        //Uses Conservative variables
+        void BoundaryLayerUpdateConsVar(Sol_Isen& sol, Mesh& mesh, string MeshTag,\
+                double dtRelax, int NRelax\
+                );
 
         //Update dtRelax_ using the relaxation cofactors and the Jacobian eigenvalues
         void BoundaryLayerTimeStepUpdate(Sol_Isen& sol, Mesh& mesh);
 
         //Update the solution from t to t+ NRelax_*dtRelax_
         void BoundaryLayer(Sol_Isen& sol, Mesh& mesh);
+        void BoundaryLayerTest(Sol_Isen& sol, Mesh& mesh, string Filename);
 
         /************************************************/
         /*****************  CONVECTION  *****************/
@@ -127,6 +152,9 @@ class Solver_Isen
         //Save the solution 
         void Save_Sol(string FileOutputFormat, string FileName,\
                 Sol_Isen& sol, Mesh& mesh, int ite);
+
+        void Save_Sol_Local(string FileName,\
+                Sol_Isen& sol, Mesh& mesh, double x_cell, double time);
 };
 
 //External Functions
@@ -134,6 +162,8 @@ class Solver_Isen
 /*************************************************/
 /********** BOUNDARY LAYER RESOLUTION ************/
 /*************************************************/
+
+/*%%%%%%%%%%  EqRelax Variables %%%%%%%%%%*/
 
 //Returns the solution of the ODE dt(V) = B_eq * V, with B_eq the linearized source term at equilibrium
 Vector5d LinearizedSourceTermEqODE(\
@@ -143,16 +173,63 @@ Vector5d LinearizedSourceTermEqODE(\
         );
 
 //Returns the CFL constraint related to the eigenvalues of the LinearizedSourceTermEq
-double LocalCourant_LSTEq(Vector5d& W_state_avr,\
+Vector2d LocalCourant_LSTEq(\
+        Vector5d& W_state0, Vector5d& W_state_L, Vector5d& W_state_R,\
         ThermoLaw& Therm, double pRef, double mRef,\
         double tauMin, double etaP, double etaU,\
         double SpaceStep,\
-        double Damp\
+        double Damp,\
+        int face_id\
         );
 
 //Returns the solution of the system of ODEs shown by Bereux and Sainsaulieu
 void BoundaryLayerResolutionLocal(\
         Vector5d& H_state,Vector5d& W_state_L, Vector5d& W_state_R,\
+        ThermoLaw& Therm, double pRef, double mRef,\
+        double etaP, double etaU,\
+        double dtRelax, double tauMin, double NRelax,\
+        double SpaceStep\
+        );
+
+void BoundaryLayerResolutionLocalTest(\
+        string VariableType,\
+        Vector5d& H_state,Vector5d& W_state_L, Vector5d& W_state_R,\
+        Matrix5d& LinJac_L, Matrix5d& LinJac_R,\
+        Matrix5d& LinSouTerm, Vector5d& STerm,\
+        ThermoLaw& Therm, double pRef, double mRef,\
+        double etaP, double etaU,\
+        double dtRelax, double tauMin,\
+        double SpaceStep\
+        );
+
+void BoundaryLayerResolutionLocalTestNewton(\
+        string VariableType,\
+        Vector5d& H_state,Vector5d& W_state_L, Vector5d& W_state_R,\
+        Matrix5d& LinJac_L, Matrix5d& LinJac_R,\
+        Matrix5d& LinSouTermInv, Vector5d& STerm,\
+        ThermoLaw& Therm, double pRef, double mRef,\
+        double etaP, double etaU,\
+        double dtRelax, double tauMin,\
+        double SpaceStep\
+        );
+
+//Returns the solution of the system of ODEs with the Source Term, Newton Method
+void SourceTermResolutionLocalNewton(\
+        Vector5d& H_state,\
+        ThermoLaw& Therm, double pRef, double mRef,\
+        double etaP, double etaU,\
+        double CourantBL, double tauMin, double NRelax\
+        );
+
+//During the time evolution of the Bereux-Sainsaulieu ODE, save the solution H_state, 
+//in the filename
+void SaveBereuxSainsaulieu(Vector5d& H_state, string filename, double time);
+
+/*%%%%%%%%%%  Conservative Variables %%%%%%%%%%*/
+
+//Returns the solution of the system of ODEs shown by Bereux and Sainsaulieu
+void BoundaryLayerResolutionLocalConsVar(\
+        Vector5d& H_state,Vector5d& U_state_L, Vector5d& U_state_R,\
         ThermoLaw& Therm, double pRef, double mRef,\
         double etaP, double etaU,\
         double dtRelax, double tauMin, double NRelax,\
@@ -178,6 +255,44 @@ Vector5d BoundaryLayerSolSingleCharact_Pert(\
         double c0, double rho_pert, double p_pert, double dx\
         );
 
+/*****************************************************************************/
+/************** HIGH ORDER IMPLICIT TIME INTEGRATION METHOD ******************/
+/*****************************************************************************/
+
+//Fourth order time integration
+void TimeIntegration(Sol_Isen& sol, double SimulationTime, double dtRelax,\
+        string FileNameInput, double CourantBL\
+        );
+
+void TimeIntegrationLoc(Vector5d& U_state_ini,\
+        Matrix5d& EigenVectorBasis, Matrix5d& EigenVectorBasisInv,\
+        Matrix5d& TauMat,\
+        Vector5d& U_state_ref, Vector5d& U_state_eq,\
+        double dtRelax, double tauMin);
+
+//Rosenbrock of order 4 method
+void RosenBrockFourthOrder(\
+        Matrix5d& TauMat,\
+        Matrix5d& EigenVectorBasis, Matrix5d& EigenVectorBasisInv,\
+        Vector5d& U_state_ini, Vector5d& U_state_ref, Vector5d& U_eq,\
+        Vector5d& STerm_ini, Vector5d& JacVector_ini, Vector5d& One,\
+        double& dtRelax_ini, double& dtRelax_end, double& dtRelax_estim,\
+        int& TimeStepIteCounter\
+        );
+
+//Update the source term corresponding to a non-linear cubic spring
+void NonLinearSpring(Matrix5d& TauMat, Vector5d& U_state, Vector5d& U_eq, Vector5d& STerm,\
+        Matrix5d& EigenVectorBasis, Matrix5d& EigenVectorBasisInv);
+
+//Returns the diagonal vector of the source term jacobian related to a non-linear cubic spring
+Vector5d NonLinearSpringGradient(Matrix5d& TauMat, Vector5d& U_state, Vector5d& U_eq,\
+        Matrix5d& EigenVectorBasisInv);
+
+//Returns the exact solution at time t of the non-linear cubic relaxation
+void NonLinearSpringExactSolution(Vector5d& U_state_exact, Vector5d& U_state_ini,\
+        Vector5d& U_state_eq, Matrix5d& EigenVectorBasis, Matrix5d& EigenVectorBasisInv,\
+        Vector5d& TimeRefVector, double time);
+
 /************************************************/
 /*****************  CONVECTION  *****************/
 /************************************************/
@@ -201,4 +316,22 @@ double LocalCourant_Conv(Vector5d& W_state_L, Vector5d& W_state_R,\
                 double SpaceStep,\
                 double Courant\
                 );
+//Returns the convergence curves, orders and efficiency curves of the simulation
+void Convergence_Curve(\
+        double Length, int NGhostCells, \
+        string LeftBCType, string RightBCType, \
+        ThermoLaw& therm,\
+        string SolType,\
+        string VariableType,\
+        Vector5d& InitL, Vector5d& InitR,\
+        int Nbr_Areas, double x0,\
+        double SimulationTime, \
+        bool CFL_ramp, int CFL_ramp_range, \
+        double CourantBL, double CourantConv,\
+        int NRelax,\
+        double pRef, double mRef,\
+        Vector3d& tauRelax,\
+        string SchemeTypeCons, string SchemeTypeNCons,\
+        Array<int, Eigen::Dynamic, 1>& CellsTab, \
+        string FileOutputFormat, string CV_curve, int print_freq);
 #endif

@@ -36,6 +36,7 @@ int main(int argc, char* argv[])
     string Simulation_Name;
     //Solution choice
     string SolType;
+    string VariableType;
 
     //Thermodynamics choice
     string ThermoLawType1; 
@@ -80,7 +81,7 @@ int main(int argc, char* argv[])
 
     double CourantBL;
     double CourantConv;
-    double TimeStep = Big;
+    double SimulationTime;
     
     //Mesh
     double Length;
@@ -148,6 +149,14 @@ int main(int argc, char* argv[])
                     cout<<"Sol Type: "<<SolType<<endl;
 
                 }
+                else if(key_word=="VARIABLE_TYPE"){
+
+                    getline(fichier,key_str_info,
+                            end_of_line);
+                    VariableType=key_str_info;
+                    cout<<"Variable Type: "<<VariableType<<endl;
+
+                }
                 else if(key_word=="THERMODYNAMICS1"){
 
                     getline(fichier,key_str_info, ' ');
@@ -169,7 +178,7 @@ int main(int argc, char* argv[])
                             end_of_line);
                     kBAR1=stod(key_str_info);
 
-                    Simulation_Name+="_"+ThermoLawType1;
+                    Simulation_Name+="_"+ThermoLawType1+"_";
                     cout<<"Thermodynamics1: "<<ThermoLawType1<<", "<<"Gamma1= "<<Gamma1<<\
                         ", PiSG1=  "<<PiSG1<<", kBAR1=  "<<kBAR1<<endl;
                 }
@@ -366,6 +375,13 @@ int main(int argc, char* argv[])
                     cout<<"CFL, CONV: "<<CourantConv<<", BL: "<<CourantBL<<endl;
 
                 }
+                else if(key_word=="SIMULATION_TIME"){
+
+                    getline(fichier,key_str_info, end_of_line);
+                    SimulationTime=stod(key_str_info);
+                    cout<<"Simulation Time: "<<SimulationTime<<endl;
+
+                }
                 else if(key_word=="LENGTH"){
 
                     getline(fichier,key_str_info, end_of_line);
@@ -432,10 +448,9 @@ int main(int argc, char* argv[])
     }
     else{cerr << "Impossible d'ouvrir le fichier !" << endl;}
 
+    cout<<endl;
+
 	/***** SIMULATION *****/
-    //Mesh parameters
-    int Ncells = CellsTab(0);
-    Mesh  mesh_try(Length, Ncells, NGhostCells);
 
     //EOS parameters
     ThermoLaw therm_try(\
@@ -449,8 +464,11 @@ int main(int argc, char* argv[])
     if(SolType=="Pure Contact"){
 
         //Single contact discontinuity test case
+        if(fabs(u1_L-u2_L)> epsZero){
+
         InitR = WstateContactResolution(InitL, alpha1_R,\
                 therm_try, epsDicho);
+        }
 
         alpha1_R = InitR(0);
             p1_R = InitR(1);
@@ -479,27 +497,99 @@ int main(int argc, char* argv[])
         cout<<"    dp     |"<<V_EqRelax_L(4)<<"|"<<V_EqRelax_R(4)<<"|"<<endl;
         cout<<endl;
     }
+    else if(SolType=="Shock Contact"){
 
-    //Solver parameters
-    Sol_Isen sol_try(mesh_try,\
-		therm_try,\
+        double rho1_L     = Density_EOS(1, therm_try, p1_L, ZERO);
+        double rho2_L     = Density_EOS(2, therm_try, p2_L, ZERO);
+
+        double sigma1Shock = TWO*u1_L - Sound_Speed_EOS(1, therm_try, rho1_L, p1_L);
+        double sigma2Shock = TWO*u2_L - Sound_Speed_EOS(2, therm_try, rho2_L, p2_L);
+
+        cout<<"Inside main, Shock-Contact detected, sigma1Shock = "<<sigma1Shock\
+            <<", sigma2Shock = "<<sigma2Shock<<endl<<endl;
+
+        InitL = WstateRHJumpCondition(\
+                InitL,\
+                sigma1Shock, sigma2Shock,\
+                therm_try, epsDicho);
+
+        alpha1_L = InitL(0);
+            p1_L = InitL(1);
+            u1_L = InitL(2);
+            p2_L = InitL(3);
+            u2_L = InitL(4);
+
+        cout<<"New Left State: "<<endl<<endl;
+
+        cout<<"VARIABLES  |      LEFT      |      RIGHT     |"<<endl;
+        cout<<" alpha1    |"<<alpha1_L<<"|"<<alpha1_R<<"|"<<endl;
+        cout<<"    p1     |"<<p1_L<<"|"<<p1_R<<"|"<<endl;
+        cout<<"    u1     |"<<u1_L<<"|"<<u1_R<<"|"<<endl;
+        cout<<"    p2     |"<<p2_L<<"|"<<p2_R<<"|"<<endl;
+        cout<<"    u2     |"<<u2_L<<"|"<<u2_R<<"|"<<endl;
+        cout<<endl<<endl;
+
+    }
+
+/*
+
+    Vector5d W_state_L = InitL;
+    Vector5d W_state_R = InitR;
+    Vector5d W_state_avr = NConsVarAveraged(W_state_L, W_state_R, ONE_OVER_TWO);
+    Vector5d V_state_L = NConsVarToEqRelaxLoc(W_state_L, therm_try);
+    Vector5d V_state_R = NConsVarToEqRelaxLoc(W_state_R, therm_try);
+    Vector5d H_state = NConsVarAveraged(V_state_L, V_state_R, ONE_OVER_TWO);
+
+    double tauMin  = min(tauRelax(0), tauRelax(1));
+    double tauP = tauRelax(0);
+    double tauU = tauRelax(1);
+    double etaP = tauMin/tauP;
+    double etaU = tauMin/tauU;
+
+    double SpaceStep = 1e-2;
+
+    double dtRelax = LocalCourant_LSTEq(W_state_avr,\
+        therm_try, pRef, mRef,\
+        tauMin, etaP, etaU,\
+        SpaceStep,\
+        CourantBL);
+
+    SourceTermResolutionLocalNewton(\
+            H_state,\
+            therm_try, pRef, mRef,\
+            etaP, etaU,\
+            CourantBL, tauMin, NRelax\
+            );
+
+    exit(EXIT_FAILURE);
+
+    BoundaryLayerResolutionLocal(\
+        H_state, W_state_L, W_state_R,\
+        therm_try, pRef, mRef,\
+        etaP, etaU,\
+        dtRelax, tauMin, NRelax,\
+        SpaceStep\
+        );
+
+    */
+
+    Convergence_Curve(\
+        Length, NGhostCells, \
+        LeftBCType, RightBCType, \
+        therm_try,\
+        SolType,\
+        VariableType,\
+        InitL, InitR,\
+        Nbr_Areas, x0,\
+        SimulationTime, \
+        CFL_ramp, CFL_ramp_range, \
+        CourantBL, CourantConv,\
+        NRelax,\
         pRef, mRef,\
         tauRelax,\
-        InitL, InitR,\
-		SolType,\
-		LeftBCType, RightBCType,\
-        x0\
-		);
-
-    double dtRelax = Big;
-    double SimulationTime = 5.e-2;
-
-    Solver_Isen solver_try(dtRelax, NRelax, CourantBL,\
-            SchemeTypeCons, SchemeTypeNCons,\
-            TimeStep, CourantConv,\
-            SimulationTime, print_freq\
-            );
-    solver_try.Simulation(sol_try, mesh_try, FileOutputFormat, Simulation_Name);
+        SchemeTypeCons, SchemeTypeNCons,\
+        CellsTab, \
+        FileOutputFormat, Simulation_Name, print_freq);
 
     // */
 

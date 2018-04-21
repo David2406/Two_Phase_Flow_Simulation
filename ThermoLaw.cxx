@@ -363,7 +363,7 @@ VectorXd  Sound_Speed_EOS_Tab(\
 double Pressure_EOS(\
         int PhaseId,\
         ThermoLaw& therm, \
-        double rho, double e){
+        long double rho, long double e){
 
     //Local variables:
     string ThermoLawType;
@@ -727,5 +727,87 @@ double Rho_EOS_ps(\
         }
 
         return ZERO;
+}
+ 
+/*************** ISENTROPIC B-N RELAXATION ************/
+
+double Rho_Sound_Speed_Squared_EOS(\
+        int PhaseId,\
+        ThermoLaw& therm, \
+	    double rho, double p){
+
+    //Local variables:
+    string ThermoLawType;
+    double Gamma, PiSG;
+
+    if (PhaseId==1){
+
+        ThermoLawType = therm.ThermoLawType1_;
+        Gamma         = therm.Gamma1_;
+        PiSG          = therm.PiSG1_;
+
+    }
+    else if (PhaseId==2){
+
+        ThermoLawType = therm.ThermoLawType2_;
+        Gamma         = therm.Gamma2_;
+        PiSG          = therm.PiSG2_;
+
+    }        //Function: 
+
+    if (ThermoLawType=="PG"){ //Stiffened Gas Law
+
+        return Gamma*p; 
+    }
+    else if (ThermoLawType=="SG"){ //Stiffened Gas Law
+
+        return Gamma*(p+PiSG); 
+    }
+    else if (ThermoLawType=="BAR"){ //Isentropic EOS
+
+        return Gamma*p; 
+
+    }
+
+    return ZERO;
+}
+
+double Dp_Rho_Sound_Speed_Squared_EOS(\
+        int PhaseId,\
+        ThermoLaw& therm, \
+	    double rho, double p){
+
+    //Local variables:
+    string ThermoLawType;
+    double Gamma;
+
+    if (PhaseId==1){
+
+        ThermoLawType = therm.ThermoLawType1_;
+        Gamma         = therm.Gamma1_;
+
+    }
+    else if (PhaseId==2){
+
+        ThermoLawType = therm.ThermoLawType2_;
+        Gamma         = therm.Gamma2_;
+
+    }        
+    //Function: 
+
+    if (ThermoLawType=="PG"){ //Stiffened Gas Law
+
+        return Gamma; 
+    }
+    else if (ThermoLawType=="SG"){ //Stiffened Gas Law
+
+        return Gamma; 
+    }
+    else if (ThermoLawType=="BAR"){ //Isentropic EOS
+
+        return Gamma; 
+    }
+
+    return ZERO;
 }
  
