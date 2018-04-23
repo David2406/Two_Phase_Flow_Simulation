@@ -49,6 +49,16 @@ class Sol_Isen
     // alpha_R, rho1_R, u1_R, rho2_R, u2_R
     Vector5d InitR_;
 
+    //Frozen Jacobian matrix, Frozen Rusanov radius
+    //built with (InitR_ + InitL_)/2
+    Matrix5d JacConvFrozen_;
+    double   EigenvaluesFrozen_;
+    Matrix5d TimeMat_;
+    Vector5d W_eq_;
+    Vector5d W_ref_;
+    Matrix5d EigenVectorBasis_;
+    Matrix5d EigenVectorBasisInv_;
+
     //Relaxation Times
     //tauRelax_(0) = pressure relaxation time
     //tauRelax_(1) = velocity relaxation time

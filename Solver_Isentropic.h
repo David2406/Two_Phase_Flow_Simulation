@@ -74,7 +74,6 @@ class Solver_Isen
         //Courant number for the convection step
         double CourantConv_;
 
-
         //Time of the Simulation
         double SimulationTime_;
         double TimeElapsed_;
@@ -109,18 +108,13 @@ class Solver_Isen
         /***************  BOUNDARY LAYER  ***************/
         /************************************************/
 
-        //Resolution of the time boundary layer related to the relaxation processes
-        void BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,\
-                double dtRelax, int NRelax\
-                );
-        void BoundaryLayerUpdateTest(Sol_Isen& sol, Mesh& mesh, string MeshTag,\
-                double& dtRelax, double& dtRelax_estim, string VariableType);
+        /**********************/
+        /* BEREUX-SAINSAULIEU */
+        /**********************/
 
         //Resolution of the time boundary layer related to the relaxation processes
-        //Uses Conservative variables
-        void BoundaryLayerUpdateConsVar(Sol_Isen& sol, Mesh& mesh, string MeshTag,\
-                double dtRelax, int NRelax\
-                );
+        void BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,\
+                double& dtRelax, double& dtRelax_estim, string VariableType);
 
         //Update dtRelax_ using the relaxation cofactors and the Jacobian eigenvalues
         void BoundaryLayerTimeStepUpdate(Sol_Isen& sol, Mesh& mesh);
@@ -128,6 +122,10 @@ class Solver_Isen
         //Update the solution from t to t+ NRelax_*dtRelax_
         void BoundaryLayer(Sol_Isen& sol, Mesh& mesh);
         void BoundaryLayerTest(Sol_Isen& sol, Mesh& mesh, string Filename);
+
+        /**********************/
+        /*** FRACTIONAL-STEP **/
+        /**********************/
 
         /************************************************/
         /*****************  CONVECTION  *****************/
@@ -140,6 +138,9 @@ class Solver_Isen
 
         //Updates the conservative vectors using conservative and non-conservative fluxes
         void ConsVarUpdate(Sol_Isen& sol, Mesh& mesh);
+
+        //Updates the cell-colocated SourceTerm vector after the boundary layer resolution
+        void SourceTermsUpdate(Sol_Isen& sol, Mesh& mesh);
 
         //Updates the TimeStep_ based the Jacobian eigenvalues
         void TimeStepUpdate(Sol_Isen& sol, Mesh& mesh);
@@ -301,6 +302,8 @@ void NonLinearSpringExactSolution(Vector5d& U_state_exact, Vector5d& U_state_ini
 Vector5d ConsVarFluxUpdateLoc(\
         Vector5d& W_state_L, Vector5d&  W_state_R,\
         ThermoLaw& Therm,\
+        Matrix5d& JacConvFrozen,\
+        double EigenvaluesFrozen,\
         string SchemeTypeCons\
         );
 

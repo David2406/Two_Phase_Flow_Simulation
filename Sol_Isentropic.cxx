@@ -32,6 +32,7 @@ Sol_Isen::Sol_Isen(Mesh& M,\
     InitL_ = InitL;
     InitR_ = InitR;
 
+
     //Copying the relaxation times
     tauRelax_ = tauRelax;
 
@@ -87,6 +88,72 @@ Sol_Isen::Sol_Isen(Mesh& M,\
     SolExact_        = NConsVar_;
     SolExactEqRelax_ = NConsVarEqRelax_;
 
+    /////////////////////////////////////////////////////////////////
+    //FROZEN PART AND CUBIC RELAXATION//
+    Vector5d Init_avr = ONE_OVER_TWO*(InitR_ + InitL_); 
+
+    //Reference state
+    W_ref_<<0.5,
+           1.e5,
+           ONE,
+           3.e6,
+           ONE;
+
+    //Equilibrium state
+    W_eq_<<0.5,
+        3.e5,
+        6.,
+        4.e6,
+        -0.5;
+
+    //Time matrix
+    //Time relaxation exponential operator
+    double mu_0 = ONE;
+    double mu_1 = ONE;
+    double mu_2 = ONE;
+    double mu_3 = ONE;
+    double mu_4 = ONE;
+
+    Vector5d Relax_mu;
+    Relax_mu <<mu_0,
+               mu_1,
+               mu_2,
+               mu_3,
+               mu_4;
+
+    Vector5d U_state_ref = NConsVarToConsVarLoc(W_ref_, Therm);
+
+    TimeMat_ = TimeRelaxMat(U_state_ref, Relax_mu);
+    TimeMat_         *= (ONE/etaRelax_(0));
+
+
+    //Eigenvector base matrix
+    EigenVectorBasis_ = IsentropicBN_Eigenvectors(\
+            VariableType,\
+            Init_avr,\
+            Therm\
+            );
+   
+    //Eigenvector base inverse matrix
+    EigenVectorBasisInv_ = IsentropicBN_EigenvectorsInv(\
+            VariableType,\
+            Init_avr,\
+            Therm\
+            );
+
+    JacConvFrozen_ = LinearizedJacobian(Init_avr,\
+        VariableType,\
+        Therm\
+        );
+
+    Vector5d EigenvaluesFrozen = IsentropicBN_Eigenvalues(\
+                Init_avr,\
+                Therm\
+                );
+
+    EigenvaluesFrozen_ = (EigenvaluesFrozen.array().abs()).maxCoeff();
+
+    //////////////////////////////////////////////////////////////////
 }
 
 Sol_Isen::Sol_Isen( Sol_Isen& solution){
@@ -281,11 +348,19 @@ void Sol_Isen::ConsVarInit(Vector5d& InitR, Vector5d& InitL,\
         ((*this).ConsVar_)(i,4) = m2*u2;
 
         //SourceTerms Vector Filled
+        //FIXME
+        ((*this).SourceTerms_)(i,0) = ZERO;
+        ((*this).SourceTerms_)(i,1) = ZERO;
+        ((*this).SourceTerms_)(i,2) = ZERO;
+        ((*this).SourceTerms_)(i,3) = ZERO;
+        ((*this).SourceTerms_)(i,4) = ZERO;
+        /*
         ((*this).SourceTerms_)(i,0) = -(Kp_Coeff(pRef, alpha1)/tauP)*dp;
         ((*this).SourceTerms_)(i,1) = ZERO;
         ((*this).SourceTerms_)(i,2) = +(Ku_Coeff(mRef, alpha1)/tauU)*du;
         ((*this).SourceTerms_)(i,3) = ZERO;
         ((*this).SourceTerms_)(i,4) = -(Ku_Coeff(mRef, alpha1)/tauU)*du;
+        */
     }
 }
 
@@ -886,29 +961,13 @@ void Sol_Isen::SolExact_Update(Mesh& mesh, double time){
         Vector5d PureConvVector;
 
         //Eigenvector base matrix
-        Matrix5d RmatEigenVectors = IsentropicBN_Eigenvectors(\
-                VariableType_,\
-                W_state_avr,\
-                SolTherm_\
-                );
+        Matrix5d RmatEigenVectors = EigenVectorBasis_;
 
         //EigenvectorInv base matrix
-        Matrix5d RmatEigenVectorsInv = IsentropicBN_EigenvectorsInv(\
-                VariableType_,\
-                W_state_avr,\
-                SolTherm_\
-                );
+        Matrix5d RmatEigenVectorsInv = EigenVectorBasisInv_;
 
         //Reference state
-        Vector5d W_ref;
-        
-           W_ref<<0.5,
-           1.e5,
-           ONE,
-           3.e6,
-           ONE;
-
-        Vector5d U_state_ref = NConsVarToConsVarLoc(W_ref, SolTherm_);
+        Vector5d U_state_ref = NConsVarToConsVarLoc(W_ref_, SolTherm_);
          
         Vector5d aRef = U_state_ref;
 
@@ -922,14 +981,7 @@ void Sol_Isen::SolExact_Update(Mesh& mesh, double time){
         Vector5d DeltaCoords = RmatEigenVectorsInv*(U_state_R - U_state_L);
         Vector5d InitLCoords = RmatEigenVectorsInv*(U_state_L);
         
-        Vector5d W_inf;
-        W_inf<<0.5,
-               3.e5,
-               6.,
-               4.e6,
-               -0.5;
-        
-        Vector5d U_state_inf = NConsVarToConsVarLoc(W_inf, SolTherm_);
+        Vector5d U_state_inf = NConsVarToConsVarLoc(W_eq_, SolTherm_);
 
         Vector5d U_infCoords = RmatEigenVectorsInv*U_state_inf;
 

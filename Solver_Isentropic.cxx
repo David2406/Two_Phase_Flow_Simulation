@@ -57,102 +57,7 @@ Solver_Isen::Solver_Isen(){
 /***************  BOUNDARY LAYER  ***************/
 /************************************************/
 
-void Solver_Isen::BoundaryLayerUpdate(\
-        Sol_Isen& sol, Mesh& mesh, string MeshTag,\
-        double dtRelax, int NRelax\
-        ){
-
-    //Local variables
-    int L,R;
-    Vector5d V_state_L, V_state_R, W_state_L, W_state_R, W_state_avr;
-    Vector5d H_state_avr;
-
-    //Function
-
-    //mesh inputs
-    double SpaceStep = mesh.Get_SpaceStep();
-
-    //sol inputs
-    string LeftBCType  = sol.LeftBCType_;
-    string RightBCType = sol.RightBCType_;
-
-    //relaxation inputs
-    double tauMin = sol.etaRelax_(0);
-    double etaU   = sol.etaRelax_(1);
-    double etaP   = sol.etaRelax_(2);
-
-    //Initialization of H_state_avr:
-    H_state_avr<<ZERO,
-                 ZERO,
-                 ZERO,
-                 ZERO,
-                 ZERO;
-
-    int Nfaces      = mesh.Get_Nfaces();
-    double NcellExt = mesh.Get_NcellExt();
-
-    for(int face_id = 0; face_id < Nfaces; face_id++){
-
-        //Boundary Layer Resolution performed on the faces of the PRIMAL mesh
-        if (MeshTag =="Primal"){
-
-            L = mesh.FaceIndex_(face_id,1);
-            R = mesh.FaceIndex_(face_id,2);
-
-            W_state_L = sol.NConsVar_.row(L).transpose();
-            W_state_R = sol.NConsVar_.row(R).transpose();
-        }
-        //Boundary Layer Resolution performed on the faces of the DUAL mesh
-        else{
-
-            L = mesh.FaceIndexDual_(face_id,1);
-            R = mesh.FaceIndexDual_(face_id,2);
-
-            W_state_L = sol.NConsVarDual_.row(L).transpose();
-            W_state_R = sol.NConsVarDual_.row(R).transpose();
-        }
-
-        double weight_L = ONE_OVER_TWO;
-        V_state_L   = NConsVarToEqRelaxLoc(W_state_L, sol.SolTherm_);
-        V_state_R   = NConsVarToEqRelaxLoc(W_state_R, sol.SolTherm_);
-        H_state_avr = NConsVarAveraged(V_state_L, V_state_R, weight_L);
-
-        //Resolution of the time-boundary layer
-
-        BoundaryLayerResolutionLocal(\
-                H_state_avr, W_state_L, W_state_R,\
-                sol.SolTherm_, sol.pRef_, sol.mRef_,\
-                etaP, etaU,\
-                dtRelax, tauMin, NRelax,\
-                SpaceStep\
-                );
-
-        //Update of the staggered solution
-
-        //PRIMAL mesh --> DUAL update
-        if (MeshTag =="Primal"){
-
-            sol.NConsVarDual_.row(face_id) = EqRelaxToNConsVarLoc(H_state_avr,\
-                    sol.SolTherm_).transpose();
-        }
-        //DUAL mesh --> PRIMAL update + Imposed boundary conditions
-        else{
-
-            sol.NConsVar_.row(face_id+1) = EqRelaxToNConsVarLoc(H_state_avr,\
-                    sol.SolTherm_).transpose();
-
-            if (LeftBCType=="transparent" && RightBCType=="transparent" ){
-
-                sol.NConsVar_.row(0)          = sol.NConsVar_.row(1);
-                sol.NConsVar_.row(NcellExt-1) = sol.NConsVar_.row(NcellExt-2);
-
-            }
-        }
-    }
-
-}
-
-void Solver_Isen::BoundaryLayerUpdateTest(Sol_Isen& sol, Mesh& mesh, string MeshTag,\
+void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,\
         double& dtRelax, double& dtRelax_estim, string VariableType){
 
     //Local variables
@@ -213,39 +118,16 @@ void Solver_Isen::BoundaryLayerUpdateTest(Sol_Isen& sol, Mesh& mesh, string Mesh
     Vector5d W_state0 = ONE_OVER_TWO*(sol.InitL_ + sol.InitR_);
     LinJac_L = LinearizedJacobian(W_state0, VariableType, sol.SolTherm_); 
     LinJac_R = LinearizedJacobian(W_state0, VariableType, sol.SolTherm_); 
+
     //FIXME
     //LinJac_L = MatrixXd::Zero(5,5); 
     //LinJac_R = MatrixXd::Zero(5,5); 
 
-
     //Reference state
-    Vector5d W_ref;
-    
-    W_ref<<0.5,
-           1.e5,
-           ONE,
-           3.e6,
-           ONE;
-
-    Vector5d U_state_ref = NConsVarToConsVarLoc(W_ref, sol.SolTherm_);
+    Vector5d U_state_ref = NConsVarToConsVarLoc(sol.W_ref_, sol.SolTherm_);
 
     //Time matrix
-    //Time relaxation exponential operator
-    double mu_0 = ONE;
-    double mu_1 = ONE;
-    double mu_2 = ONE;
-    double mu_3 = ONE;
-    double mu_4 = ONE;
-
-    Vector5d Relax_mu;
-    Relax_mu <<mu_0,
-               mu_1,
-               mu_2,
-               mu_3,
-               mu_4;
-
-    Matrix5d TimeMat = TimeRelaxMat(U_state_ref, Relax_mu);
-    TimeMat         *= (ONE/tauMin);
+    Matrix5d TimeMat = sol.TimeMat_;
 
     //FIXME
     //Relax_mu *= -ONE;
@@ -259,18 +141,10 @@ void Solver_Isen::BoundaryLayerUpdateTest(Sol_Isen& sol, Mesh& mesh, string Mesh
     Vector5d One = VectorXd::Constant(5, ONE);
 
     //Eigenvector base matrix
-    Matrix5d RmatEigenVectors   = IsentropicBN_Eigenvectors(\
-            VariableType,\
-            W_state0,\
-            sol.SolTherm_\
-            );
+    Matrix5d RmatEigenVectors   = sol.EigenVectorBasis_;
    
     //Eigenvector base inverse matrix
-    Matrix5d RmatEigenVectorsInv = IsentropicBN_EigenvectorsInv(\
-            VariableType,\
-            W_state0,\
-            sol.SolTherm_\
-            );
+    Matrix5d RmatEigenVectorsInv = sol.EigenVectorBasisInv_;
 
     //Linearized source term matrix
     //FIXME
@@ -292,17 +166,7 @@ void Solver_Isen::BoundaryLayerUpdateTest(Sol_Isen& sol, Mesh& mesh, string Mesh
     U_infCoords(4) *= mu_4;
     */
 
-
-    Vector5d W_eq;
-        W_eq<<0.5,
-              3.e5,
-              6.,
-              4.e6,
-              -0.5;
-
-    Vector5d U_state_eq = NConsVarToConsVarLoc(W_eq, sol.SolTherm_);
-    Vector5d a_eq = RmatEigenVectorsInv*U_state_eq;
-
+    Vector5d U_state_eq = NConsVarToConsVarLoc(sol.W_eq_, sol.SolTherm_);
 
     //Asymptotic state
     //FIXME
@@ -480,97 +344,6 @@ void Solver_Isen::BoundaryLayerUpdateTest(Sol_Isen& sol, Mesh& mesh, string Mesh
 
 }
 
-void Solver_Isen::BoundaryLayerUpdateConsVar(\
-        Sol_Isen& sol, Mesh& mesh, string MeshTag,\
-        double dtRelax, int NRelax\
-        ){
-
-    //Local variables
-    int L,R;
-    Vector5d U_state_L, U_state_R;
-    Vector5d H_state_avr;
-
-    //Function
-
-    //mesh inputs
-    double SpaceStep = mesh.Get_SpaceStep();
-
-    //sol inputs
-    string LeftBCType  = sol.LeftBCType_;
-    string RightBCType = sol.RightBCType_;
-
-    //relaxation inputs
-    double tauMin = sol.etaRelax_(0);
-    double etaU   = sol.etaRelax_(1);
-    double etaP   = sol.etaRelax_(2);
-
-    //Initialization of H_state_avr:
-    H_state_avr<<ZERO,
-                 ZERO,
-                 ZERO,
-                 ZERO,
-                 ZERO;
-
-    int Nfaces      = mesh.Get_Nfaces();
-    double NcellExt = mesh.Get_NcellExt();
-
-    for(int face_id = 0; face_id < Nfaces; face_id++){
-
-        //Boundary Layer Resolution performed on the faces of the PRIMAL mesh
-        if (MeshTag =="Primal"){
-
-            L = mesh.FaceIndex_(face_id,1);
-            R = mesh.FaceIndex_(face_id,2);
-
-            U_state_L = sol.ConsVar_.row(L).transpose();
-            U_state_R = sol.ConsVar_.row(R).transpose();
-        }
-        //Boundary Layer Resolution performed on the faces of the DUAL mesh
-        else{
-
-            L = mesh.FaceIndexDual_(face_id,1);
-            R = mesh.FaceIndexDual_(face_id,2);
-
-            U_state_L = sol.ConsVarDual_.row(L).transpose();
-            U_state_R = sol.ConsVarDual_.row(R).transpose();
-        }
-
-        double weight_L = ONE_OVER_TWO;
-        H_state_avr = NConsVarAveraged(U_state_L, U_state_R, weight_L);
-
-        //Resolution of the time-boundary layer
-
-        BoundaryLayerResolutionLocalConsVar(\
-                H_state_avr, U_state_L, U_state_R,\
-                sol.SolTherm_, sol.pRef_, sol.mRef_,\
-                etaP, etaU,\
-                dtRelax, tauMin, NRelax,\
-                SpaceStep\
-                );
-
-        //Update of the staggered solution
-
-        //PRIMAL mesh --> DUAL update
-        if (MeshTag =="Primal"){
-
-            sol.ConsVarDual_.row(face_id) = H_state_avr.transpose();
-        }
-        //DUAL mesh --> PRIMAL update + Imposed boundary conditions
-        else{
-
-            sol.ConsVar_.row(face_id+1) = H_state_avr.transpose();
-
-            if (LeftBCType=="transparent" && RightBCType=="transparent" ){
-
-                sol.ConsVar_.row(0)          = sol.ConsVar_.row(1);
-                sol.ConsVar_.row(NcellExt-1) = sol.ConsVar_.row(NcellExt-2);
-
-            }
-        }
-    }
-
-}
-
 void Solver_Isen::BoundaryLayerTimeStepUpdate(Sol_Isen& sol, Mesh& mesh){
 
     //Local variables
@@ -630,66 +403,40 @@ void Solver_Isen::BoundaryLayerTimeStepUpdate(Sol_Isen& sol, Mesh& mesh){
 
 }
 
+
 void Solver_Isen::BoundaryLayer(Sol_Isen& sol, Mesh& mesh){
 
-    cout<<"Inside BoundaryLayer, check conservativity m1: BEFORE"<<endl;
-    sol.Check_Conservativity(1, mesh);
+    //Local Variables
+    string MeshTag;
+    string VariableType = sol.VariableType_;
 
-    cout<<"Inside BoundaryLayer, dt initial = "<<dtRelax_<<endl;
+    //Function
 
-    //Update of the timestep in order to update the time boundary layer
-    BoundaryLayerTimeStepUpdate(sol, mesh);
+    double TimeStep       = dtRelax_/TWO;
+    double TimeStep_estim = Big;
 
-    cout<<"Inside BoundaryLayer, dt updated = "<<dtRelax_<<endl;
+    for(int ite = 1; ite <=NRelax_; ite++){
 
-    string MeshTag = "Primal";
-    int NRelaxHalf = floor(NRelax_/2);
+        MeshTag = "Primal";
 
-    cout<<"Inside BoundaryLayer, ConsVar_     = "<<endl;
-    //cout<<sol.NConsVar_<<endl<<endl;
-    cout<<sol.ConsVar_<<endl<<endl;
-    cout<<"Inside BoundaryLayer, ConsVarDual_ = "<<endl;
-    //cout<<sol.NConsVarDual_<<endl<<endl;
-    cout<<sol.ConsVarDual_<<endl<<endl;
+        //Update starting from PRIMAL face
 
-    //Update starting from PRIMAL face
-    
-    BoundaryLayerUpdate(sol, mesh, MeshTag,\
-            dtRelax_, NRelaxHalf\
-            );
-    /*
-    BoundaryLayerUpdateConsVar(sol, mesh, MeshTag,\
-            dtRelax_, NRelaxHalf\
-            );
-    */
+        BoundaryLayerUpdate(sol, mesh, MeshTag,\
+                TimeStep, TimeStep_estim, VariableType);
 
-    cout<<"Inside BoundaryLayer PRIMAL UPDATE, ConsVar_     = "<<endl;
-    //cout<<sol.NConsVar_<<endl<<endl;
-    cout<<sol.ConsVar_<<endl<<endl;
-    cout<<"Inside BoundaryLayer PRIMAL UPDATE, ConsVarDual_ = "<<endl;
-    //cout<<sol.NConsVarDual_<<endl<<endl;
-    cout<<sol.ConsVarDual_<<endl<<endl;
+        TimeElapsed_ += TimeStep;
 
-    MeshTag = "Dual";
+        MeshTag = "Dual";
 
-    //Update starting from DUAL face
-    BoundaryLayerUpdate(sol, mesh, MeshTag,\
-            dtRelax_, NRelaxHalf\
-            );
-    /*
-    BoundaryLayerUpdateConsVar(sol, mesh, MeshTag,\
-            dtRelax_, NRelaxHalf\
-            );
-     */
-    cout<<"Inside BoundaryLayer DUAL UPDATE, NConsVar_     = "<<endl;
-    //cout<<sol.NConsVar_<<endl<<endl;
-    cout<<sol.ConsVar_<<endl<<endl;
-    cout<<"Inside BoundaryLayer DUAL UPDATE, NConsVarDual_ = "<<endl;
-    //cout<<sol.NConsVarDual_<<endl<<endl;
-    cout<<sol.ConsVarDual_<<endl<<endl;
+        //Update starting from DUAL face
 
-    cout<<"Inside BoundaryLayer, check conservativity m1: AFTER"<<endl;
-    sol.Check_Conservativity(1, mesh);
+        BoundaryLayerUpdate(sol, mesh, MeshTag,\
+                TimeStep, TimeStep_estim, VariableType);
+
+        TimeElapsed_ += TimeStep;
+
+    }
+
 }
 
 void Solver_Isen::BoundaryLayerTest(Sol_Isen& sol, Mesh& mesh, string Filename){
@@ -747,7 +494,7 @@ void Solver_Isen::BoundaryLayerTest(Sol_Isen& sol, Mesh& mesh, string Filename){
 
     //Update starting from PRIMAL face
 
-    BoundaryLayerUpdateTest(sol, mesh, MeshTag,\
+    BoundaryLayerUpdate(sol, mesh, MeshTag,\
             TimeStep, TimeStep_estim, VariableType);
 
     //FIXME
@@ -757,7 +504,7 @@ void Solver_Isen::BoundaryLayerTest(Sol_Isen& sol, Mesh& mesh, string Filename){
 
     //Update starting from DUAL face
 
-    BoundaryLayerUpdateTest(sol, mesh, MeshTag,\
+    BoundaryLayerUpdate(sol, mesh, MeshTag,\
     TimeStep, TimeStep_estim, VariableType);
 
     //FIXME
@@ -834,6 +581,8 @@ void Solver_Isen::ConsVarFluxUpdate(Sol_Isen& sol, Mesh& mesh){
             sol.ConsVarFlux_.row(face_id) = ConsVarFluxUpdateLoc(\
                     W_state_L, W_state_R,\
                     sol.SolTherm_,\
+                    sol.JacConvFrozen_,\
+                    sol.EigenvaluesFrozen_,\
                     SchemeTypeCons_\
                     ).transpose();
         }
@@ -916,7 +665,8 @@ void Solver_Isen::ConsVarUpdate(Sol_Isen& sol, Mesh& mesh){
 
         sol.ConsVar_.row(cell_id) +=-(TimeStep_/SpaceStep)*(
             sol.ConsVarFlux_.row(Rf) - sol.ConsVarFlux_.row(Lf) +\
-            sol.NConsVarFlux_.row(cell_id) );
+            sol.NConsVarFlux_.row(cell_id) ) +\
+            TimeStep_*(sol.SourceTerms_.row(cell_id));
     }
 
     //Treatment of the boundary conditions
@@ -931,6 +681,50 @@ void Solver_Isen::ConsVarUpdate(Sol_Isen& sol, Mesh& mesh){
     else{
         sol.ConsVar_.row(0)          = MatrixXd::Zero(1,5);
         sol.ConsVar_.row(NcellExt-1) = MatrixXd::Zero(1,5);
+    }
+
+}
+
+void Solver_Isen::SourceTermsUpdate(Sol_Isen& sol, Mesh& mesh){
+
+    //Local variables
+
+    //Function
+
+    int Ncells       = mesh.Get_Ncells();
+    int NcellExt     = mesh.Get_NcellExt();
+
+    string  LeftBCType   =sol.LeftBCType_;
+    string  RightBCType  =sol.RightBCType_;
+
+    Vector5d U_state;
+    Vector5d STerm;
+
+    Vector5d U_state_eq = NConsVarToConsVarLoc(sol.W_eq_, sol.SolTherm_);
+
+    for(int cell_id = 1; cell_id <= Ncells; cell_id++){
+
+        U_state = sol.ConsVar_.row(cell_id).transpose();
+
+        NonLinearSpring(sol.TimeMat_, U_state, U_state_eq, STerm,\
+                sol.EigenVectorBasis_, sol.EigenVectorBasisInv_);
+
+        sol.SourceTerms_.row(cell_id) = STerm.transpose(); 
+
+    }
+
+    //Treatment of the boundary conditions
+    if(LeftBCType=="transparent"){
+        sol.SourceTerms_.row(0) = sol.SourceTerms_.row(1);
+
+    }
+    if(RightBCType=="transparent"){
+        sol.SourceTerms_.row(NcellExt-1) = sol.SourceTerms_.row(NcellExt-2);
+
+    }
+    else{
+        sol.SourceTerms_.row(0)          = MatrixXd::Zero(1,5);
+        sol.SourceTerms_.row(NcellExt-1) = MatrixXd::Zero(1,5);
     }
 
 }
@@ -964,6 +758,7 @@ void Solver_Isen::TimeStepUpdate(Sol_Isen& sol, Mesh& mesh){
                 SpaceStep,\
                 CourantConv_\
                 );
+
         TimeStep_ = min(TimeStep_, dtConvLoc);
     }
 
@@ -974,7 +769,6 @@ void Solver_Isen::Simulation(Sol_Isen& sol, Mesh& mesh,\
                 ){
 
     //Local variables
-    double time(ZERO);
     int ite(0);
 
     //CPU time variables
@@ -987,17 +781,30 @@ void Solver_Isen::Simulation(Sol_Isen& sol, Mesh& mesh,\
     //Measuring the wall clock time for the simulation
     t = clock();
 
-    while(time < SimulationTime_){
+    //Definition of the relaxation time step
+    double TauMin = sol.etaRelax_(0);
+    dtRelax_ = CourantBL_*TauMin;
 
-        //Update of the discrete timestep
+    while(TimeElapsed_ < SimulationTime_){
+
+        //Boundary Layer Resolution part during: NRelax_*dtRelax_
+        BoundaryLayer(sol, mesh);
+
+        //Update of the source terms
+        SourceTermsUpdate(sol, mesh);
+
+        //Update of the discrete timestep for the convection part
         TimeStepUpdate(sol, mesh);
 
-        time+=TimeStep_;
-        if(time > SimulationTime_){
-            TimeStep_ = time - SimulationTime_;
-            time      = SimulationTime_;
+        TimeElapsed_+=TimeStep_;
+        if(TimeElapsed_ > SimulationTime_){
+            TimeStep_ = TimeElapsed_ - SimulationTime_;
+            TimeElapsed_      = SimulationTime_;
         }
         ite++;
+
+        cout<<"Inside Simulation: dtRelax = "<<dtRelax_<<", TimeStep = "<<TimeStep_<<\
+        ", TimeElapsed = "<<TimeElapsed_<<endl;
 
         //cout<<"Inside Simulation: TimeStep_ = "<<TimeStep_<<endl;
 
@@ -1005,7 +812,11 @@ void Solver_Isen::Simulation(Sol_Isen& sol, Mesh& mesh,\
         ConsVarFluxUpdate(sol, mesh);
 
         //Update of the non-conservative flux
-        NConsVarFluxUpdate(sol, mesh);
+        if(SchemeTypeCons_=="Rusanov"){
+
+            NConsVarFluxUpdate(sol, mesh);
+
+        }
 
         //Update of the conservative variables
         ConsVarUpdate(sol, mesh);
@@ -1023,7 +834,7 @@ void Solver_Isen::Simulation(Sol_Isen& sol, Mesh& mesh,\
         sol.Mach_Update();
 
         //Updating the exact solution
-        sol.SolExact_Update(mesh, time);
+        sol.SolExact_Update(mesh, TimeElapsed_);
 
         if(ite%print_freq_==0){
 
@@ -1034,7 +845,7 @@ void Solver_Isen::Simulation(Sol_Isen& sol, Mesh& mesh,\
         if(ite%500==0){
 
             //Saving results at last iteration
-            cout<<"Inside Simulation: "<<time/SimulationTime_<<"  completed"<<endl; 
+            cout<<"Inside Simulation: "<<TimeElapsed_/SimulationTime_<<"  completed"<<endl; 
         }
     }
 
@@ -1048,7 +859,6 @@ void Solver_Isen::Simulation(Sol_Isen& sol, Mesh& mesh,\
 
     //Computing the L1 errors and L1 exact norms at final time
     sol.Compute_L1_err(mesh);
-
 }
 
 void Solver_Isen::Save_Sol(string FileOutputFormat, string FileName,\
@@ -2851,20 +2661,21 @@ void NonLinearSpringExactSolution(Vector5d& U_state_exact, Vector5d& U_state_ini
 Vector5d ConsVarFluxUpdateLoc(\
         Vector5d& W_state_L, Vector5d&  W_state_R,\
         ThermoLaw& Therm,\
+        Matrix5d& JacConvFrozen,\
+        double EigenvaluesFrozen,\
         string SchemeTypeCons\
         ){
 
     //Local Variables
     Vector5d ConsFlux, Flux_L, Flux_R;
-    Vector5d U_state_L, U_state_R;
+    Vector5d U_state_L = NConsVarToConsVarLoc(W_state_L, Therm);
+    Vector5d U_state_R = NConsVarToConsVarLoc(W_state_R, Therm);
     
     //Function
     if(SchemeTypeCons=="Rusanov"){
 
         Flux_L    = ConsVarFlux(W_state_L, Therm); 
         Flux_R    = ConsVarFlux(W_state_R, Therm); 
-        U_state_L = NConsVarToConsVarLoc(W_state_L, Therm);
-        U_state_R = NConsVarToConsVarLoc(W_state_R, Therm);
 
         double lambda = SpectralRadiusRusanov(\
                 W_state_L, W_state_R,\
@@ -2873,6 +2684,11 @@ Vector5d ConsVarFluxUpdateLoc(\
         ConsFlux = ONE_OVER_TWO*(Flux_L + Flux_R) -\
                    (ONE_OVER_TWO*lambda)*(U_state_R - U_state_L);
 
+    }
+    else if(SchemeTypeCons=="Frozen Rusanov"){
+
+        ConsFlux = ONE_OVER_TWO*JacConvFrozen*(U_state_L + U_state_R) -\
+                   (ONE_OVER_TWO*EigenvaluesFrozen)*(U_state_R - U_state_L);
     }
     else{
 
@@ -3133,17 +2949,16 @@ void Convergence_Curve(\
                 );
 
         //FIXME
-        double CourantBL = solver_try.CourantBL_;
-        double TauMin    = sol_try.etaRelax_(0);
-        TimeIntegration(sol_try, solver_try.SimulationTime_, CourantBL*TauMin, CV_curve, CourantBL);
+        //double CourantBL = solver_try.CourantBL_;
+        //double TauMin    = sol_try.etaRelax_(0);
+        //TimeIntegration(sol_try, solver_try.SimulationTime_, CourantBL*TauMin, CV_curve, CourantBL);
         //solver_try.BoundaryLayerTest(sol_try, mesh_try, CV_curve);
 
 	    string FileName=CV_curve;
-        //FIXME
-        /*
-           solver_try.Simulation(sol_try, mesh_try,\
-           FileOutputFormat, FileName);
-         */
+        
+        solver_try.Simulation(sol_try, mesh_try,\
+                FileOutputFormat, FileName);
+         
 
 	    //Getting the exact error for the first Ncells as reference in the error calculation
 
