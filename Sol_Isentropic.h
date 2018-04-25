@@ -94,6 +94,13 @@ class Sol_Isen
 	                        // column 4:  m2 = alpha2*rho2   values
 	                        // column 5:  m2*u2              values
 
+	MatrixXd ConsVarOld_;//Dynamic matrix of 'NcellExt' rows and 5 columns:
+	                        // column 0:  alpha1             values
+	                        // column 1:  m1 = alpha1*rho1   values
+	                        // column 2:  m1*u1              values
+	                        // column 4:  m2 = alpha2*rho2   values
+	                        // column 5:  m2*u2              values
+
 	MatrixXd NConsVar_;//Dynamic matrix of 'NcellExt' rows and 5 columns:
 	                        // column 0: alpha1 values
 	                        // column 1: p1     values 

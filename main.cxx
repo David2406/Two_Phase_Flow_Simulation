@@ -55,6 +55,7 @@ int main(int argc, char* argv[])
     double mRef;
 
     bool SourceTerm;
+    bool FractionalStep;
     int NRelax;
     
     //Boundary Conditions 
@@ -240,10 +241,28 @@ int main(int argc, char* argv[])
                         SourceTerm = false;
                     }
                 }
+                else if(key_word=="FRACTIONAL_STEP"){
+                    getline(fichier,key_str_info, end_of_line);
+                    if(key_str_info=="true"){
+                        FractionalStep = true;
+                        Simulation_Name +="_FracStep";
+                    }
+                    else{
+                        FractionalStep = false;
+                    }
+                }
                 else if(key_word=="NRELAX"){
                     getline(fichier,key_str_info, end_of_line);
                     NRelax = stoi(key_str_info);
-                    cout<<"SourceTerm: "<<SourceTerm<<", NRelax: "<<NRelax<<endl;
+                    if(FractionalStep==true){
+
+                        cout<<"FractionalStep: "<<FractionalStep<<", SourceTerm: "<<SourceTerm<<\
+                            ", NO BS RELAXATION"<<endl;
+                    }
+                    else{
+                        cout<<"FractionalStep: "<<FractionalStep<<", SourceTerm: "<<SourceTerm<<\
+                            ", NRelax: "<<NRelax<<endl;
+                    }
                 }
                 else if(key_word=="LEFT_BC_TYPE"){
 
@@ -584,6 +603,7 @@ int main(int argc, char* argv[])
         SimulationTime, \
         CFL_ramp, CFL_ramp_range, \
         CourantBL, CourantConv,\
+        FractionalStep,\
         NRelax,\
         pRef, mRef,\
         tauRelax,\

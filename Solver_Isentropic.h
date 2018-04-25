@@ -47,6 +47,7 @@ class Solver_Isen
     public:
  
         string FileOutputFormat_;
+        bool FractionalStep_;
 
         /************************************************/
         /***************  BOUNDARY LAYER  ***************/
@@ -88,6 +89,7 @@ class Solver_Isen
 
         //constructor:
         Solver_Isen(\
+                bool FractionalStep,\
                 int NRelax, double CourantBL,\
                 string SchemeTypeCons, string SchemeTypeNCons,\
                 double CourantConv,\
@@ -127,6 +129,13 @@ class Solver_Isen
         /*** FRACTIONAL-STEP **/
         /**********************/
 
+        //Resolution of the time boundary layer related to the relaxation processes
+        void BoundaryLayerUpdateFracStep(Sol_Isen& sol, Mesh& mesh, string MeshTag,\
+                double& dtRelax, double& dtRelax_estim, string VariableType);
+
+        //Update the pure relaxation solution from t to t + *dtConv_
+        void BoundaryLayerFracStep(Sol_Isen& sol, Mesh& mesh);
+
         /************************************************/
         /*****************  CONVECTION  *****************/
         /************************************************/
@@ -138,6 +147,9 @@ class Solver_Isen
 
         //Updates the conservative vectors using conservative and non-conservative fluxes
         void ConsVarUpdate(Sol_Isen& sol, Mesh& mesh);
+
+        //Updates the conservative vectors using the projective method of P. Lafitte and T. Rey
+        void ConsVarUpdateLafitteRey(Sol_Isen& sol, Mesh& mesh);
 
         //Updates the cell-colocated SourceTerm vector after the boundary layer resolution
         void SourceTermsUpdate(Sol_Isen& sol, Mesh& mesh);
@@ -281,6 +293,16 @@ void RosenBrockFourthOrder(\
         int& TimeStepIteCounter\
         );
 
+//Rosenbrock of order 4 method
+void RungeKuttaFourthOrder(\
+        Matrix5d& TauMat,\
+        Matrix5d& EigenVectorBasis, Matrix5d& EigenVectorBasisInv,\
+        Vector5d& U_state_ini, Vector5d& U_state_ref, Vector5d& U_eq,\
+        Vector5d& STerm_ini,\
+        double& dtRelax_ini, double& dtRelax_end, double& dtRelax_estim,\
+        int& TimeStepIteCounter\
+        );
+
 //Update the source term corresponding to a non-linear cubic spring
 void NonLinearSpring(Matrix5d& TauMat, Vector5d& U_state, Vector5d& U_eq, Vector5d& STerm,\
         Matrix5d& EigenVectorBasis, Matrix5d& EigenVectorBasisInv);
@@ -331,6 +353,7 @@ void Convergence_Curve(\
         double SimulationTime, \
         bool CFL_ramp, int CFL_ramp_range, \
         double CourantBL, double CourantConv,\
+        bool FractionalStep,\
         int NRelax,\
         double pRef, double mRef,\
         Vector3d& tauRelax,\

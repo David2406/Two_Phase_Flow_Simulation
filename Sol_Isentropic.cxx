@@ -68,6 +68,7 @@ Sol_Isen::Sol_Isen(Mesh& M,\
     
     //Initializing the ConsVarDual_ to ZERO 
     ConsVarDual_     = MatrixXd::Zero(NcellExt,5);
+    ConsVarOld_      = MatrixXd::Zero(NcellExt,5);
 
     //Initializing the ConsVarDual_ to ZERO 
     NConsVarDual_    = MatrixXd::Zero(NcellExt,5);
@@ -93,11 +94,20 @@ Sol_Isen::Sol_Isen(Mesh& M,\
     Vector5d Init_avr = ONE_OVER_TWO*(InitR_ + InitL_); 
 
     //Reference state
+    //Out of Equilibrium
+    /*
+       W_ref_<<0.5,
+       1.e5,
+       ONE,
+       3.e6,
+       ONE;
+     */
+    //At Equilibrium
     W_ref_<<0.5,
-           1.e5,
-           ONE,
-           3.e6,
-           ONE;
+           3.e5,
+           6.,
+           4.e6,
+           -0.5;
 
     //Equilibrium state
     W_eq_<<0.5,
