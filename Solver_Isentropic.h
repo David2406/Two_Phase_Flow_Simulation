@@ -293,7 +293,17 @@ void RosenBrockFourthOrder(\
         int& TimeStepIteCounter\
         );
 
-//Rosenbrock of order 4 method
+//Euler Implicit of order 1 method
+void ImplicitEuler(\
+        Matrix5d& TauMat,\
+        Matrix5d& EigenVectorBasis, Matrix5d& EigenVectorBasisInv,\
+        Vector5d& U_state_ini, Vector5d& U_state_ref, Vector5d& U_eq,\
+        Vector5d& STerm_ini, Vector5d& JacVector_ini, Vector5d& One,\
+        double& dtRelax_ini, double& dtRelax_end, double& dtRelax_estim,\
+        int& TimeStepIteCounter\
+        );
+
+//Explicit Runge-Kutta of order 4 method
 void RungeKuttaFourthOrder(\
         Matrix5d& TauMat,\
         Matrix5d& EigenVectorBasis, Matrix5d& EigenVectorBasisInv,\
@@ -302,6 +312,14 @@ void RungeKuttaFourthOrder(\
         double& dtRelax_ini, double& dtRelax_end, double& dtRelax_estim,\
         int& TimeStepIteCounter\
         );
+
+//Update the source term corresponding to a linear spring
+void LinearSpring(Matrix5d& TauMat, Vector5d& U_state, Vector5d& U_eq, Vector5d& STerm,\
+        Matrix5d& EigenVectorBasis, Matrix5d& EigenVectorBasisInv);
+
+//Returns the diagonal vector of the source term jacobian related to a linear spring
+Vector5d LinearSpringGradient(Matrix5d& TauMat, Vector5d& U_state, Vector5d& U_eq,\
+        Matrix5d& EigenVectorBasisInv);
 
 //Update the source term corresponding to a non-linear cubic spring
 void NonLinearSpring(Matrix5d& TauMat, Vector5d& U_state, Vector5d& U_eq, Vector5d& STerm,\

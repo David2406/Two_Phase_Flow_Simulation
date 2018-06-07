@@ -69,7 +69,7 @@ void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,
 
     //Local variables
     int L,R;
-    Vector5d X_state_L, X_state_R, W_state_L, W_state_R, W_state_avr;
+    Vector5d X_state_L, X_state_R;
     Vector5d H_state_avr, H_state_copy;
     //Matrix5d LinJac_L, LinJac_R;
     Matrix5d LinJac_R;
@@ -169,8 +169,8 @@ void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,
             L = mesh.FaceIndex_(face_id,1);
             R = mesh.FaceIndex_(face_id,2);
 
-            W_state_L = sol.NConsVar_.row(L).transpose();
-            W_state_R = sol.NConsVar_.row(R).transpose();
+            X_state_L = sol.ConsVar_.row(L).transpose();
+            X_state_R = sol.ConsVar_.row(R).transpose();
         }
         //Boundary Layer Resolution performed on the faces of the DUAL mesh
         else{
@@ -178,8 +178,8 @@ void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,
             L = mesh.FaceIndexDual_(face_id,1);
             R = mesh.FaceIndexDual_(face_id,2);
 
-            W_state_L = sol.NConsVarDual_.row(L).transpose();
-            W_state_R = sol.NConsVarDual_.row(R).transpose();
+            X_state_L = sol.ConsVarDual_.row(L).transpose();
+            X_state_R = sol.ConsVarDual_.row(R).transpose();
         }
 
         //Jacobian Matrices Construction
@@ -191,8 +191,6 @@ void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,
 
         if(VariableType=="ConsVar"){
 
-            X_state_L   = NConsVarToConsVarLoc(W_state_L, sol.SolTherm_);
-            X_state_R   = NConsVarToConsVarLoc(W_state_R, sol.SolTherm_);
             H_state_avr = NConsVarAveraged(X_state_L, X_state_R, weight_L);
 
             H_state_copy = H_state_avr;
@@ -206,15 +204,32 @@ void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,
             TimeStepIteCounter = 0;
 
             //Source term initialization L
-            NonLinearSpring(TimeMat, X_state_L, U_state_eq, STerm_L,\
+            LinearSpring(TimeMat, X_state_L, U_state_eq, STerm_L,\
                     RmatEigenVectors, RmatEigenVectorsInv);
+            /*
+               NonLinearSpring(TimeMat, X_state_L, U_state_eq, STerm_L,\
+               RmatEigenVectors, RmatEigenVectorsInv);
+             */
 
-
-            JacVector_L = NonLinearSpringGradient(TimeMat, X_state_L, U_state_eq,\
+            JacVector_L = LinearSpringGradient(TimeMat, X_state_L, U_state_eq,\
                     RmatEigenVectorsInv);
+            /*
+               JacVector_L = NonLinearSpringGradient(TimeMat, X_state_L, U_state_eq,\
+               RmatEigenVectorsInv);
+             */
 
+            /*
+               RosenBrockFourthOrder(\
+               TimeMat,\
+               RmatEigenVectors, RmatEigenVectorsInv,\
+               X_state_L, U_state_ref, U_state_eq,\
+               STerm_L, JacVector_L, One,\
+               dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
+               TimeStepIteCounter\
+               );
+             */
 
-            RosenBrockFourthOrder(\
+            ImplicitEuler(\
                     TimeMat,\
                     RmatEigenVectors, RmatEigenVectorsInv,\
                     X_state_L, U_state_ref, U_state_eq,\
@@ -222,7 +237,6 @@ void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,
                     dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
                     TimeStepIteCounter\
                     );
-
             /*
             RungeKuttaFourthOrder(\
                     TimeMat,\
@@ -241,15 +255,32 @@ void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,
             TimeStepIteCounter = 0;
 
             //Source term initialization R
+            LinearSpring(TimeMat, X_state_R, U_state_eq, STerm_R,\
+                    RmatEigenVectors, RmatEigenVectorsInv);
+            /*
             NonLinearSpring(TimeMat, X_state_R, U_state_eq, STerm_R,\
                     RmatEigenVectors, RmatEigenVectorsInv);
+            */
 
-            
+            JacVector_R = LinearSpringGradient(TimeMat, X_state_R, U_state_eq,\
+                    RmatEigenVectorsInv);
+            /* 
             JacVector_R = NonLinearSpringGradient(TimeMat, X_state_R, U_state_eq,\
                     RmatEigenVectorsInv);
+             */
             
-            
+            /*
             RosenBrockFourthOrder(\
+                    TimeMat,\
+                    RmatEigenVectors, RmatEigenVectorsInv,\
+                    X_state_R, U_state_ref, U_state_eq,\
+                    STerm_R, JacVector_R, One,\
+                    dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
+                    TimeStepIteCounter\
+                    );
+            */
+
+            ImplicitEuler(\
                     TimeMat,\
                     RmatEigenVectors, RmatEigenVectorsInv,\
                     X_state_R, U_state_ref, U_state_eq,\
@@ -275,16 +306,32 @@ void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,
             dtRelax_face_estim = dtRelax;
             TimeStepIteCounter = 0;
 
-            //Source term initialization R
+            //Source term initialization H
+            LinearSpring(TimeMat, H_state_copy, U_state_eq, STerm,\
+                    RmatEigenVectors, RmatEigenVectorsInv);
+            /*
             NonLinearSpring(TimeMat, H_state_copy, U_state_eq, STerm,\
                     RmatEigenVectors, RmatEigenVectorsInv);
+            */
 
-
+            JacVector = LinearSpringGradient(TimeMat, H_state_copy, U_state_eq,\
+                    RmatEigenVectorsInv);
+            /*
             JacVector = NonLinearSpringGradient(TimeMat, H_state_copy, U_state_eq,\
                     RmatEigenVectorsInv);
+             */
 
-
+            /*
             RosenBrockFourthOrder(\
+                    TimeMat,\
+                    RmatEigenVectors, RmatEigenVectorsInv,\
+                    H_state_copy, U_state_ref, U_state_eq,\
+                    STerm, JacVector, One,\
+                    dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
+                    TimeStepIteCounter\
+                    );
+             */
+            ImplicitEuler(\
                     TimeMat,\
                     RmatEigenVectors, RmatEigenVectorsInv,\
                     H_state_copy, U_state_ref, U_state_eq,\
@@ -341,26 +388,6 @@ void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,
             }
         }
 
-    }
-
-    //Update of the variable arrays
-    if(VariableType=="EqRelaxVar"){
-
-        if(MeshTag=="Primal"){
-            sol.EqRelaxToNConsVar("Dual");
-        }
-        else if(MeshTag=="Dual"){
-            sol.EqRelaxToNConsVar("Primal");
-        }
-    }
-    else if(VariableType=="ConsVar"){
-
-        if(MeshTag=="Primal"){
-            sol.ConsVarToNConsVar("Dual");
-        }
-        else if(MeshTag=="Dual"){
-            sol.ConsVarToNConsVar("Primal");
-        }
     }
 
 }
@@ -678,6 +705,9 @@ void Solver_Isen::BoundaryLayerUpdateFracStep(Sol_Isen& sol, Mesh& mesh, string 
             JacVector = NonLinearSpringGradient(TimeMat, H_state_cell, U_state_eq,\
                     RmatEigenVectorsInv);
 
+            //FIXME
+           
+            /*
             RosenBrockFourthOrder(\
                     TimeMat,\
                     RmatEigenVectors, RmatEigenVectorsInv,\
@@ -686,6 +716,18 @@ void Solver_Isen::BoundaryLayerUpdateFracStep(Sol_Isen& sol, Mesh& mesh, string 
                     dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
                     TimeStepIteCounter\
                     );
+                    */
+            
+            
+            ImplicitEuler(\
+                    TimeMat,\
+                    RmatEigenVectors, RmatEigenVectorsInv,\
+                    H_state_cell, U_state_ref, U_state_eq,\
+                    STerm, JacVector, One,\
+                    dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
+                    TimeStepIteCounter\
+                    );
+                    
 
             //FIXME
             //KEEPING THE TIME STEP USED FOR THE DESIRED ACCURACY ROSENBROCK
@@ -1089,10 +1131,11 @@ void Solver_Isen::Simulation(Sol_Isen& sol, Mesh& mesh,\
 
         ite++;
 
-        /*
+       /* 
         cout<<"Inside Simulation: dtRelax = "<<dtRelax_<<", TimeStep = "<<TimeStep_<<\
         ", TimeElapsed = "<<TimeElapsed_<<endl;
         */
+        
 
         //Update NConsVar_ using the matrix ConsVar_
         sol.ConsVarToNConsVar("Primal");
@@ -2471,6 +2514,8 @@ void TimeIntegration(Sol_Isen& sol, double SimulationTime, double dtRelax,\
 
     double tauMin = sol.etaRelax_(0);
 
+    cout<<"tauMin = "<<tauMin<<endl;
+
     Matrix5d TimeMat_;
     Vector5d W_eq_;
     Vector5d W_ref_;
@@ -2498,7 +2543,7 @@ void TimeIntegration(Sol_Isen& sol, double SimulationTime, double dtRelax,\
     Vector5d U_state_exact = U_state_ini;
 
     //Time matrix
-    double mu_0 = ONE;
+    double mu_0 = THOUSAND;
     double mu_1 = ONE;
     double mu_2 = ONE;
     double mu_3 = ONE;
@@ -2533,8 +2578,8 @@ void TimeIntegration(Sol_Isen& sol, double SimulationTime, double dtRelax,\
 
     char numstrCFL[20]; // enough to hold all numbers up to 64-bits
     sprintf(numstrCFL, "%f", CourantBL);
-    string FileName    = "TimeIntegration_Ros4_"+FileNameInput+"_CFL"+numstrCFL+".dat";
-    string FileNameErr = "TimeIntegration_Ros4_"+FileNameInput+"Error.dat";
+    string FileName    = "TimeIntegration_EuImp1_"+FileNameInput+"_CFL"+numstrCFL+".dat";
+    string FileNameErr = "TimeIntegration_EuImp1_"+FileNameInput+"Error.dat";
 
     string Folder_location="./Output/";
     FileName    = Folder_location+FileName;
@@ -2585,7 +2630,7 @@ void TimeIntegration(Sol_Isen& sol, double SimulationTime, double dtRelax,\
     //a first guess
 
     dtRelax_ini = dtRelax;
-    cout<<"dtRelax = "<<dtRelax<<endl;
+    //cout<<"dtRelax = "<<dtRelax<<endl;
 
     if(file){  // If the opening is successful
 
@@ -2595,7 +2640,8 @@ void TimeIntegration(Sol_Isen& sol, double SimulationTime, double dtRelax,\
 
             ite++;
             TimeStepIteCounter = 0;
-             
+            
+            
                RosenBrockFourthOrder(\
                TauMat,\
                EigenVectorBasis, EigenVectorBasisInv,\
@@ -2604,6 +2650,19 @@ void TimeIntegration(Sol_Isen& sol, double SimulationTime, double dtRelax,\
                dtRelax_ini, dtRelax_end, dtRelax_estim,\
                TimeStepIteCounter\
                );
+             
+               /**
+               
+               ImplicitEuler(\
+                       TauMat,\
+                       EigenVectorBasis, EigenVectorBasisInv,\
+                       U_state_ini, U_state_ref, U_state_eq,\
+                       STerm_ini, JacVector_ini, One,\
+                       dtRelax_ini, dtRelax_end, dtRelax_estim,\
+                       TimeStepIteCounter\
+                       );
+
+                       */
 
                JacVector_ini = NonLinearSpringGradient(\
                        TauMat, U_state_ini, U_state_eq,\
@@ -2807,6 +2866,34 @@ void RungeKuttaFourthOrder(\
     return;
 }
 
+//Euler Implicit of order 1 method
+void ImplicitEuler(\
+        Matrix5d& TauMat,\
+        Matrix5d& EigenVectorBasis, Matrix5d& EigenVectorBasisInv,\
+        Vector5d& U_state_ini, Vector5d& U_state_ref, Vector5d& U_eq,\
+        Vector5d& STerm_ini, Vector5d& JacVector_ini, Vector5d& One,\
+        double& dtRelax_ini, double& dtRelax_end, double& dtRelax_estim,\
+        int& TimeStepIteCounter\
+        ){
+
+    //local variables
+    Vector5d A_coords_inv;
+    Matrix5d DistanceDiagMat; 
+    Vector5d g1;
+
+    //Computing [Id/(Gam*dtRelax) - Jac_ini]^-1
+    A_coords_inv = ((One/(dtRelax_ini) + JacVector_ini).array()).pow(-ONE);
+    DistanceDiagMat = EigenVectorBasis*DiagonalMatrix<double, 5>(A_coords_inv)*EigenVectorBasisInv; 
+
+    //Deriving g1 vector:
+    g1 = DistanceDiagMat*STerm_ini;
+
+    U_state_ini  = U_state_ini + g1;
+
+    return;
+
+}
+
 //Rosenbrock of order 4 method
 void RosenBrockFourthOrder(\
         Matrix5d& TauMat,\
@@ -2935,6 +3022,30 @@ void RosenBrockFourthOrder(\
 
 }
 
+
+void LinearSpring(Matrix5d& TauMat, Vector5d& U_state, Vector5d& U_eq, Vector5d& STerm,\
+        Matrix5d& EigenVectorBasis, Matrix5d& EigenVectorBasisInv){
+
+    Vector5d A_coords = EigenVectorBasisInv*(U_state - U_eq);
+
+    STerm = -EigenVectorBasis*TauMat*A_coords;
+
+}
+
+Vector5d LinearSpringGradient(Matrix5d& TauMat, Vector5d& U_state, Vector5d& U_eq,\
+        Matrix5d& EigenVectorBasisInv){
+
+    Vector5d One;
+    One<<ONE,
+         ONE,
+         ONE,
+         ONE,
+         ONE;
+    Vector5d Grad   = TauMat*One;
+
+    return Grad;
+
+}
 
 //Update the source term corresponding to a non-linear cubic spring
 void NonLinearSpring(Matrix5d& TauMat, Vector5d& U_state, Vector5d& U_eq, Vector5d& STerm,\
@@ -3291,10 +3402,10 @@ void Convergence_Curve(\
         //solver_try.BoundaryLayerTest(sol_try, mesh_try, CV_curve);
 
 	    string FileName=CV_curve;        
-        
+       
         solver_try.Simulation(sol_try, mesh_try,\
                 FileOutputFormat, FileName); 
-
+                                
 	    //Getting the exact error for the first Ncells as reference in the error calculation
 
 	    X(i)=Ncells;

@@ -22,6 +22,49 @@ int main(int argc, char* argv[])
 	cout.precision(COUT_PRECISION);
 	cout<<std::scientific;
 
+    /*
+    double psat = 5.e6;
+    double rhovapsat = 25.3512;
+    double rholiqsat = 777.369;
+    double gamvapsat = 1.71206;
+    double gamliqsat = 1.61417;
+    double Cvapsat = gamvapsat*psat;
+    double Cliqsat = gamliqsat*psat;
+    double cvap = 498.043;
+    double cliq = 1087.81;
+    double Cvap = rhovapsat*cvap*cvap;
+    double Cliq = rholiqsat*cliq*cliq;
+
+    string FileName = "Celerity_Curves";
+
+    ofstream file(FileName.c_str(), ios::out);  //file flux declaration and file opening
+
+    file<<"Alpha1"<<" "<<"Cwood_sat"<<" "<<"Cstar_sat"<<" "<<"Cwood"<<" "<<"Cstar"<<endl;
+    double Cwood_sat  = ZERO;
+    double Cstar_sat  = ZERO;
+    double Cwood      = ZERO;
+    double Cstar      = ZERO;
+    double m          = ZERO;
+    double alpha2     = ZERO;
+
+    for (double alpha1=ZERO; alpha1<=ONE; alpha1+=0.001){
+
+        alpha2 = ONE - alpha1;
+        m = alpha1*rhovapsat + alpha2*rholiqsat;
+
+        Cwood_sat = sqrt((ONE/m)*(Cvapsat*Cliqsat/(alpha1*Cliqsat+alpha2*Cvapsat)));
+        Cstar_sat = sqrt(alpha2*(Cvapsat/rhovapsat) + alpha1*(Cliqsat/rholiqsat));
+
+        Cwood = sqrt((ONE/m)*(Cvap*Cliq/(alpha1*Cliq+alpha2*Cvap)));
+        Cstar = sqrt(alpha2*(Cvap/rhovapsat) + alpha1*(Cliq/rholiqsat));
+
+        file<<alpha1<<" "<<Cwood_sat<<" "<<Cstar_sat<<" "<<Cwood<<" "<<Cstar<<endl;
+
+    }
+
+    exit(EXIT_FAILURE);
+    */
+
     /* FILE READING PARAMETERS */
     string file_name="BN_Simulation.input";
     char input_comment='%';
@@ -245,7 +288,7 @@ int main(int argc, char* argv[])
                     getline(fichier,key_str_info, end_of_line);
                     if(key_str_info=="true"){
                         FractionalStep = true;
-                        Simulation_Name +="_FracStep";
+                        Simulation_Name +="FracStep";
                     }
                     else{
                         FractionalStep = false;

@@ -103,18 +103,18 @@ Sol_Isen::Sol_Isen(Mesh& M,\
        ONE;
      */
     //At Equilibrium
-    W_ref_<<0.5,
-           3.e5,
-           6.,
-           4.e6,
-           -0.5;
+    W_ref_<<0.6,
+           5.e6,
+           1.5,
+           5.e6,
+           1.5;
 
     //Equilibrium state
-    W_eq_<<0.5,
-        3.e5,
-        6.,
-        4.e6,
-        -0.5;
+    W_eq_<<0.6,
+        5.e6,
+        1.5,
+        5.e6,
+        1.5;
 
     //Time matrix
     //Time relaxation exponential operator
