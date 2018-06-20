@@ -104,17 +104,17 @@ Sol_Isen::Sol_Isen(Mesh& M,\
      */
     //At Equilibrium
     W_ref_<<0.6,
-           5.e6,
-           1.5,
-           5.e6,
-           1.5;
+           1.5e7,
+           1.,
+           1.5e7,
+           1.;
 
     //Equilibrium state
     W_eq_<<0.6,
-        5.e6,
-        1.5,
-        5.e6,
-        1.5;
+        1.5e7,
+        1.,
+        1.5e7,
+        1.;
 
     //Time matrix
     //Time relaxation exponential operator
@@ -133,9 +133,15 @@ Sol_Isen::Sol_Isen(Mesh& M,\
 
     Vector5d U_state_ref = NConsVarToConsVarLoc(W_ref_, Therm);
 
+    Vector5d One;
+    One<<ONE,
+         ONE,
+         ONE,
+         ONE,
+         ONE;
     TimeMat_ = TimeRelaxMat(U_state_ref, Relax_mu);
+    //TimeMat_ = TimeRelaxMat(One, Relax_mu);
     TimeMat_         *= (ONE/etaRelax_(0));
-
 
     //Eigenvector base matrix
     EigenVectorBasis_ = IsentropicBN_Eigenvectors(\
@@ -857,69 +863,36 @@ void Sol_Isen::SolExact_Update(Mesh& mesh, double time){
         Vector5d W_state_avr = NConsVarAveraged(InitL_, InitR_, weight_L);
         Vector5d U_update, W_update, V_update;
 
-        Vector5d ZeroTab = VectorXd::Zero(5);
-
-        //Time relaxation exponential operator
-        double mu_0 = HUNDRED;
-        double mu_1 = ONE;
-        double mu_2 = ONE;
-        double mu_3 = ONE;
-        double mu_4 = ONE;
-
-        //Asymptotic state
-
-        //Coords of U_inf in the eigenvector base
-        Vector5d U_infCoords = \
-            IsentropicBN_EigenvectorsBaseProjectionCons(\
-                     W_state_avr,\
-                     ZeroTab, InitR_,\
-                     SolTherm_);
-
-        U_infCoords(0) *= mu_0;
-        U_infCoords(1) *= mu_1;
-        U_infCoords(2) *= mu_2;
-        U_infCoords(3) *= mu_3;
-        U_infCoords(4) *= mu_4;
-
-        //Exponential time operator
-        double tau = etaRelax_(0);
-        Vector5d ExpTime;
-        ExpTime<<exp(-mu_0*(time/tau)),
-                 exp(-mu_1*(time/tau)),
-                 exp(-mu_2*(time/tau)),
-                 exp(-mu_3*(time/tau)),
-                 exp(-mu_4*(time/tau));
-        Vector5d EqTime;
-        EqTime<<(ONE - exp(-mu_0*(time/tau)))/mu_0,
-                (ONE - exp(-mu_1*(time/tau)))/mu_1,
-                (ONE - exp(-mu_2*(time/tau)))/mu_2,
-                (ONE - exp(-mu_3*(time/tau)))/mu_3,
-                (ONE - exp(-mu_4*(time/tau)))/mu_4;
+        //Used to compute the exact solution
+        double aCoordsIni, aInf;
+        Vector5d PureConvVector;
 
         //Eigenvector base matrix
-        Matrix5d RmatEigenVectors = IsentropicBN_Eigenvectors(\
-                VariableType_,\
-                W_state_avr,\
-                SolTherm_\
-                );
+        Matrix5d RmatEigenVectors = EigenVectorBasis_;
+
+        //EigenvectorInv base matrix
+        Matrix5d RmatEigenVectorsInv = EigenVectorBasisInv_;
+         
+        //Exponential time operator
+        double Tk;
+        Vector5d One;
+        One<<ONE,
+             ONE,
+             ONE,
+             ONE,
+             ONE;
+        Vector5d tauvec = TimeMat_*One;
 
         //Coords of InitR_ - InitL_ in the eigenvector base
-        Vector5d DeltaCoords = \
-            IsentropicBN_EigenvectorsBaseProjectionCons(\
-                     W_state_avr,\
-                     InitL_, InitR_,\
-                     SolTherm_);
 
-        //Coords of InitL_ in the eigenvector base
-        Vector5d InitLCoords = \
-            IsentropicBN_EigenvectorsBaseProjectionCons(\
-                     W_state_avr,\
-                     ZeroTab, InitL_,\
-                     SolTherm_);
+        Vector5d U_state_L = NConsVarToConsVarLoc(InitL_, SolTherm_);
+        Vector5d U_state_R = NConsVarToConsVarLoc(InitR_, SolTherm_);
+        Vector5d DeltaCoords = RmatEigenVectorsInv*(U_state_R - U_state_L);
+        Vector5d InitLCoords = RmatEigenVectorsInv*(U_state_L);
+        
+        Vector5d U_state_inf = NConsVarToConsVarLoc(W_eq_, SolTherm_);
 
-        //Vector5d W_test = RmatEigenVectors*InitLCoords;
-        //cout<<"Inside exact solution: "<<endl<<endl;
-        //cout<<ConsVarToNConsVarLoc(W_test, SolTherm_)<<endl;
+        Vector5d U_infCoords = RmatEigenVectorsInv*U_state_inf;
 
         //Heaviside function according to the eigenvalues
         Vector5d H_Eigen;
@@ -932,6 +905,11 @@ void Sol_Isen::SolExact_Update(Mesh& mesh, double time){
 
         //Result
         Vector5d Result;
+        Result<<ZERO,
+                ZERO,
+                ZERO,
+                ZERO,
+                ZERO;
 
         for (int cell=0; cell<NcellExt; cell++){
 
@@ -942,21 +920,28 @@ void Sol_Isen::SolExact_Update(Mesh& mesh, double time){
                      Heaviside(xcell-x_0_, time, EigenValues(3)),
                      Heaviside(xcell-x_0_, time, EigenValues(4));
 
-            //cout<<"x_cell = "<<xcell<<endl<<endl;
-            //cout<<"H_Eigen"<<endl;
-            //cout<<H_Eigen<<endl<<endl;
+            PureConvVector = InitLCoords + DeltaCoords.cwiseProduct(H_Eigen);
 
-            Result = ExpTime.cwiseProduct(InitLCoords + DeltaCoords.cwiseProduct(H_Eigen)) +\
-                     EqTime.cwiseProduct(U_infCoords);
+            for(int nVar=0;nVar<5;nVar++){
+
+                aCoordsIni   = PureConvVector(nVar);
+                aInf         = U_infCoords(nVar);
+                Tk = tauvec(nVar);
+
+                Result(nVar) = (ONE-exp(-Tk*time))*aInf + exp(-Tk*time)*aCoordsIni;
+
+            }
 
             U_update = RmatEigenVectors*Result;
 
             //Update of the solution
             W_update = ConsVarToNConsVarLoc(U_update, SolTherm_);
+
             V_update = NConsVarToEqRelaxLoc(W_update, SolTherm_);
 
             SolExact_.row(cell) = W_update.transpose();
             SolExactEqRelax_.row(cell) = V_update.transpose(); 
+
         }
 
     }
@@ -982,7 +967,7 @@ void Sol_Isen::SolExact_Update(Mesh& mesh, double time){
         Vector5d aRef = U_state_ref;
 
         //Exponential time operator
-        double tau = etaRelax_(0);
+        double tau      = etaRelax_(0);
 
         //Coords of InitR_ - InitL_ in the eigenvector base
 
