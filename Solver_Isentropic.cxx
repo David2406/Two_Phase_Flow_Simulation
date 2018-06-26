@@ -3,6 +3,8 @@
 //constructor:
 Solver_Isen::Solver_Isen(\
         bool FractionalStep,\
+        string SourceTermType,\
+        string TimeIntegrationType,\
         int NRelax, double CourantBL,\
         string SchemeTypeCons, string SchemeTypeNCons,\
         double CourantConv,\
@@ -11,19 +13,21 @@ Solver_Isen::Solver_Isen(\
         int Nfaces\
         ){
 
-    FractionalStep_   = FractionalStep;
-    dtRelax_          = Big;
-    NRelax_           = NRelax;
-    CourantBL_        = CourantBL;
-    CourantConv_      = CourantConv;
-    SchemeTypeCons_   = SchemeTypeCons;
-    SchemeTypeNCons_  = SchemeTypeNCons;
-    TimeStep_         = Big;
-    SimulationTime_   = SimulationTime;
-    TimeElapsed_      = ZERO;
-    print_freq_       = print_freq;
-    FileOutputFormat_ = FileOutputFormat; 
-    CPUTime_          = Big;
+    FractionalStep_        = FractionalStep;
+    SourceTermType_        = SourceTermType;
+    TimeIntegrationType_   = TimeIntegrationType;
+    dtRelax_               = Big;
+    NRelax_                = NRelax;
+    CourantBL_             = CourantBL;
+    CourantConv_           = CourantConv;
+    SchemeTypeCons_        = SchemeTypeCons;
+    SchemeTypeNCons_       = SchemeTypeNCons;
+    TimeStep_              = Big;
+    SimulationTime_        = SimulationTime;
+    TimeElapsed_           = ZERO;
+    print_freq_            = print_freq;
+    FileOutputFormat_      = FileOutputFormat; 
+    CPUTime_               = Big;
 
     //Allocating the size of the TimeMatrix_
     //dt, dt_BL, dt_Conv
@@ -32,19 +36,21 @@ Solver_Isen::Solver_Isen(\
 
 Solver_Isen::Solver_Isen( Solver_Isen& solver){
 
-    FractionalStep_   = solver.FractionalStep_;
-    dtRelax_          = solver.dtRelax_;
-    NRelax_           = solver.NRelax_;
-    CourantBL_        = solver.CourantBL_;
-    CourantConv_      = solver.CourantConv_;
-    SchemeTypeCons_   = solver.SchemeTypeCons_;
-    SchemeTypeNCons_  = solver.SchemeTypeNCons_;
-    TimeStep_         = solver.TimeStep_;
-    TimeElapsed_      = solver.TimeElapsed_;
-    SimulationTime_   = solver.SimulationTime_;
-    print_freq_       = solver.print_freq_;
-    FileOutputFormat_ = solver.FileOutputFormat_;
-    CPUTime_          = solver.CPUTime_;
+    FractionalStep_        = solver.FractionalStep_;
+    SourceTermType_        = solver.SourceTermType_;
+    TimeIntegrationType_   = solver.TimeIntegrationType_;
+    dtRelax_               = solver.dtRelax_;
+    NRelax_                = solver.NRelax_;
+    CourantBL_             = solver.CourantBL_;
+    CourantConv_           = solver.CourantConv_;
+    SchemeTypeCons_        = solver.SchemeTypeCons_;
+    SchemeTypeNCons_       = solver.SchemeTypeNCons_;
+    TimeStep_              = solver.TimeStep_;
+    TimeElapsed_           = solver.TimeElapsed_;
+    SimulationTime_        = solver.SimulationTime_;
+    print_freq_            = solver.print_freq_;
+    FileOutputFormat_      = solver.FileOutputFormat_;
+    CPUTime_               = solver.CPUTime_;
 
     TimeMatrix_ = solver.TimeMatrix_;
 }
@@ -96,6 +102,7 @@ void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,
     //Cubic relaxation 
     Vector5d STerm, STerm_L, STerm_R;
     Vector5d JacVector, JacVector_L, JacVector_R;
+    Vector5d DiracMass;
 
     int Nfaces      = mesh.Get_Nfaces();
     double NcellExt = mesh.Get_NcellExt();
@@ -104,7 +111,8 @@ void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,
     //Vector5d W_state0 = ONE_OVER_TWO*(sol.InitL_ + sol.InitR_);
     //LinJac_L = LinearizedJacobian(W_state0, VariableType, sol.SolTherm_); 
     //LinJac_R = LinearizedJacobian(W_state0, VariableType, sol.SolTherm_); 
-    LinJac_R = sol.JacConvFrozen_; 
+    LinJac_R  = sol.JacConvFrozen_;
+    DiracMass = sol.DiracMassFrozen_;
 
 
     //FIXME
@@ -171,62 +179,168 @@ void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,
 
             H_state_copy = H_state_avr;
 
+            //No-source terms active
+            if(SourceTermType_=="none"){
+
+                //Gathering of the solution
+                H_state_avr = H_state_copy\
+                              -(dtRelax/SpaceStep)*LinJac_R*(X_state_R - X_state_L)\
+                              +(dtRelax/SpaceStep)*DiracMass;
+            }
+            //Source terms are active
+            else{
+
             //FIXME
             
-            //Estimation the time-relaxation of U_L
+            //Estimation the time-relaxation
             dtRelax_face_ini   = dtRelax;
             dtRelax_face_end   = dtRelax;
             dtRelax_face_estim = dtRelax;
             TimeStepIteCounter = 0;
 
             //Source term initialization L
-            /*
-            LinearSpring(TimeMat, X_state_L, U_state_eq, STerm_L,\
-                    RmatEigenVectors, RmatEigenVectorsInv);
-                    */
-            
-               NonLinearSpring(TimeMat, X_state_L, U_state_eq, STerm_L,\
-               RmatEigenVectors, RmatEigenVectorsInv);
-            
-            /*
-            JacVector_L = LinearSpringGradient(TimeMat, X_state_L, U_state_eq,\
-                    RmatEigenVectorsInv);
-                    */
-            
-               JacVector_L = NonLinearSpringGradient(TimeMat, X_state_L, U_state_eq,\
-               RmatEigenVectorsInv);
-             
+            if(sol.SolType_=="Linear Convection Relaxation BN"){
 
+                //Source term U_L
+                LinearSpring(TimeMat, X_state_L, U_state_eq, STerm_L,\
+                        RmatEigenVectors, RmatEigenVectorsInv);
+
+                JacVector_L = LinearSpringGradient(TimeMat, X_state_L, U_state_eq,\
+                        RmatEigenVectorsInv);
+
+                //Source term U_R
+                LinearSpring(TimeMat, X_state_R, U_state_eq, STerm_R,\
+                        RmatEigenVectors, RmatEigenVectorsInv);
+
+                JacVector_R = LinearSpringGradient(TimeMat, X_state_R, U_state_eq,\
+                        RmatEigenVectorsInv);
+
+                //Source term H
+                LinearSpring(TimeMat, H_state_copy, U_state_eq, STerm,\
+                        RmatEigenVectors, RmatEigenVectorsInv);
+
+                JacVector = LinearSpringGradient(TimeMat, H_state_copy, U_state_eq,\
+                        RmatEigenVectorsInv);
+            }
+            else if(sol.SolType_=="Linear Convection Relaxation Cubic BN"){
             
-               RosenBrockFourthOrder(\
-               TimeMat,\
-               RmatEigenVectors, RmatEigenVectorsInv,\
-               X_state_L, U_state_ref, U_state_eq,\
-               STerm_L, JacVector_L, One,\
-               dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
-               TimeStepIteCounter\
-               );
+                //Source term U_L
+                NonLinearSpring(TimeMat, X_state_L, U_state_eq, STerm_L,\
+                        RmatEigenVectors, RmatEigenVectorsInv);
+
+                JacVector_L = NonLinearSpringGradient(TimeMat, X_state_L, U_state_eq,\
+                        RmatEigenVectorsInv);
+
+                //Source term U_R
+                NonLinearSpring(TimeMat, X_state_R, U_state_eq, STerm_R,\
+                        RmatEigenVectors, RmatEigenVectorsInv);
+
+                JacVector_R = NonLinearSpringGradient(TimeMat, X_state_R, U_state_eq,\
+                        RmatEigenVectorsInv);
+
+                //Source term H
+                NonLinearSpring(TimeMat, H_state_copy, U_state_eq, STerm,\
+                        RmatEigenVectors, RmatEigenVectorsInv);
+
+                JacVector = NonLinearSpringGradient(TimeMat, H_state_copy, U_state_eq,\
+                        RmatEigenVectorsInv);
+            }
+
+            if(TimeIntegrationType_=="Rosenbrock4"){
              
-            /*
-            ImplicitEuler(\
-                    TimeMat,\
-                    RmatEigenVectors, RmatEigenVectorsInv,\
-                    X_state_L, U_state_ref, U_state_eq,\
-                    STerm_L, JacVector_L, One,\
-                    dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
-                    TimeStepIteCounter\
-                    );
-                    */
-            /*
-            RungeKuttaFourthOrder(\
-                    TimeMat,\
-                    RmatEigenVectors, RmatEigenVectorsInv,\
-                    X_state_L, U_state_ref, U_state_eq,\
-                    STerm_L,\
-                    dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
-                    TimeStepIteCounter\
-                    );
-            //        */
+                //Source term U_L
+                RosenBrockFourthOrder(\
+                        TimeMat,\
+                        RmatEigenVectors, RmatEigenVectorsInv,\
+                        X_state_L, U_state_ref, U_state_eq,\
+                        STerm_L, JacVector_L, One,\
+                        dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
+                        TimeStepIteCounter\
+                        );
+
+                //Source term U_R
+               RosenBrockFourthOrder(\
+                       TimeMat,\
+                       RmatEigenVectors, RmatEigenVectorsInv,\
+                       X_state_R, U_state_ref, U_state_eq,\
+                       STerm_R, JacVector_R, One,\
+                       dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
+                       TimeStepIteCounter\
+                       );
+               //Source term H
+               RosenBrockFourthOrder(\
+                       TimeMat,\
+                       RmatEigenVectors, RmatEigenVectorsInv,\
+                       H_state_copy, U_state_ref, U_state_eq,\
+                       STerm, JacVector, One,\
+                       dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
+                       TimeStepIteCounter\
+                       );
+            }
+            else if(TimeIntegrationType_=="ImplicitEuler1"){
+
+                //Source term U_L
+                ImplicitEuler(\
+                        TimeMat,\
+                        RmatEigenVectors, RmatEigenVectorsInv,\
+                        X_state_L, U_state_ref, U_state_eq,\
+                        STerm_L, JacVector_L, One,\
+                        dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
+                        TimeStepIteCounter\
+                        );
+
+                //Source term U_R
+                ImplicitEuler(\
+                        TimeMat,\
+                        RmatEigenVectors, RmatEigenVectorsInv,\
+                        X_state_R, U_state_ref, U_state_eq,\
+                        STerm_R, JacVector_R, One,\
+                        dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
+                        TimeStepIteCounter\
+                        );
+
+                //Source term H
+                ImplicitEuler(\
+                        TimeMat,\
+                        RmatEigenVectors, RmatEigenVectorsInv,\
+                        H_state_copy, U_state_ref, U_state_eq,\
+                        STerm, JacVector, One,\
+                        dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
+                        TimeStepIteCounter\
+                        );
+            }
+            else if(TimeIntegrationType_=="ExplicitRungeKutta4"){
+
+                //Source term U_L
+                RungeKuttaFourthOrder(\
+                        TimeMat,\
+                        RmatEigenVectors, RmatEigenVectorsInv,\
+                        X_state_L, U_state_ref, U_state_eq,\
+                        STerm_L,\
+                        dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
+                        TimeStepIteCounter\
+                        );
+
+                //Source term U_R
+                RungeKuttaFourthOrder(\
+                        TimeMat,\
+                        RmatEigenVectors, RmatEigenVectorsInv,\
+                        X_state_R, U_state_ref, U_state_eq,\
+                        STerm_R,\
+                        dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
+                        TimeStepIteCounter\
+                        );
+
+                //Source term H
+                RungeKuttaFourthOrder(\
+                        TimeMat,\
+                        RmatEigenVectors, RmatEigenVectorsInv,\
+                        H_state_copy, U_state_ref, U_state_eq,\
+                        STerm,\
+                        dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
+                        TimeStepIteCounter\
+                        );
+            }
             
             //Estimation the time-relaxation of U_R
             dtRelax_face_ini   = dtRelax;
@@ -235,54 +349,6 @@ void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,
             TimeStepIteCounter = 0;
 
             //Source term initialization R
-            /*
-            LinearSpring(TimeMat, X_state_R, U_state_eq, STerm_R,\
-                    RmatEigenVectors, RmatEigenVectorsInv);
-                    */
-            
-            NonLinearSpring(TimeMat, X_state_R, U_state_eq, STerm_R,\
-                    RmatEigenVectors, RmatEigenVectorsInv);
-            
-            /*
-            JacVector_R = LinearSpringGradient(TimeMat, X_state_R, U_state_eq,\
-                    RmatEigenVectorsInv);
-                    */
-             
-            JacVector_R = NonLinearSpringGradient(TimeMat, X_state_R, U_state_eq,\
-                    RmatEigenVectorsInv);
-             
-            
-            
-            RosenBrockFourthOrder(\
-                    TimeMat,\
-                    RmatEigenVectors, RmatEigenVectorsInv,\
-                    X_state_R, U_state_ref, U_state_eq,\
-                    STerm_R, JacVector_R, One,\
-                    dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
-                    TimeStepIteCounter\
-                    );
-            
-            /*
-            ImplicitEuler(\
-                    TimeMat,\
-                    RmatEigenVectors, RmatEigenVectorsInv,\
-                    X_state_R, U_state_ref, U_state_eq,\
-                    STerm_R, JacVector_R, One,\
-                    dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
-                    TimeStepIteCounter\
-                    );
-                    */
-            
-            /*
-            RungeKuttaFourthOrder(\
-                    TimeMat,\
-                    RmatEigenVectors, RmatEigenVectorsInv,\
-                    X_state_R, U_state_ref, U_state_eq,\
-                    STerm_R,\
-                    dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
-                    TimeStepIteCounter\
-                    );
-            //        */
 
             //Estimation the time-relaxation of H_avr
             dtRelax_face_ini   = dtRelax;
@@ -291,61 +357,17 @@ void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,
             TimeStepIteCounter = 0;
 
             //Source term initialization H
-            /*
-            LinearSpring(TimeMat, H_state_copy, U_state_eq, STerm,\
-                    RmatEigenVectors, RmatEigenVectorsInv);
-                    */
-            
-            NonLinearSpring(TimeMat, H_state_copy, U_state_eq, STerm,\
-                    RmatEigenVectors, RmatEigenVectorsInv);
-            
-            /*
-            JacVector = LinearSpringGradient(TimeMat, H_state_copy, U_state_eq,\
-                    RmatEigenVectorsInv);
-                    */
-            
-            JacVector = NonLinearSpringGradient(TimeMat, H_state_copy, U_state_eq,\
-                    RmatEigenVectorsInv);
-             
-
-            
-            RosenBrockFourthOrder(\
-                    TimeMat,\
-                    RmatEigenVectors, RmatEigenVectorsInv,\
-                    H_state_copy, U_state_ref, U_state_eq,\
-                    STerm, JacVector, One,\
-                    dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
-                    TimeStepIteCounter\
-                    );
-             /*
-            ImplicitEuler(\
-                    TimeMat,\
-                    RmatEigenVectors, RmatEigenVectorsInv,\
-                    H_state_copy, U_state_ref, U_state_eq,\
-                    STerm, JacVector, One,\
-                    dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
-                    TimeStepIteCounter\
-                    );
-                    */
-
-            /*
-            RungeKuttaFourthOrder(\
-                    TimeMat,\
-                    RmatEigenVectors, RmatEigenVectorsInv,\
-                    H_state_copy, U_state_ref, U_state_eq,\
-                    STerm,\
-                    dtRelax_face_ini, dtRelax_face_end, dtRelax_face_estim,\
-                    TimeStepIteCounter\
-                    );
-                    */
 
             //FIXME
             //KEEPING THE TIME STEP USED FOR THE DESIRED ACCURACY ROSENBROCK
             dtRelax_estim = min(dtRelax_estim, dtRelax_face_estim);
 
             //Gathering of the solution
-            H_state_avr = H_state_copy -\
-                          (dtRelax/SpaceStep)*LinJac_R*(X_state_R - X_state_L);
+            H_state_avr = H_state_copy\
+                          -(dtRelax/SpaceStep)*LinJac_R*(X_state_R - X_state_L)\
+                          +(dtRelax/SpaceStep)*DiracMass;
+            }
+
 
             //Update of the staggered solution
 
@@ -378,6 +400,201 @@ void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,
 
     }
 
+}
+
+void Solver_Isen::BN_BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,\
+        double& dtRelax, double& dtRelax_estim, string VariableType){
+
+    //Local variables
+    int L,R;
+    Vector5d X_state_L, X_state_R;
+    Vector5d H_state_avr, H_state_copy;
+    Matrix5d LinJac_R;
+    double weight_L = ONE_OVER_TWO;
+
+    //double dtRelax_face_ini = ZERO, dtRelax_face_end = ZERO, dtRelax_face_estim = ZERO;
+    //int TimeStepIteCounter = 0;
+
+    //Function
+
+    //mesh inputs
+    double SpaceStep = mesh.Get_SpaceStep();
+
+    //sol inputs
+    string LeftBCType  = sol.LeftBCType_;
+    string RightBCType = sol.RightBCType_;
+
+    //relaxation inputs
+    //double tauMin = sol.etaRelax_(0);
+    //double etaU   = sol.etaRelax_(1);
+    //double etaP   = sol.etaRelax_(2);
+
+    //Cubic relaxation 
+    Vector5d STerm, STerm_L, STerm_R;
+    Vector5d JacVector, JacVector_L, JacVector_R;
+
+    Vector5d W_state_L, W_state_R, NConsFlux, Flux_L, Flux_R;
+
+    int Nfaces      = mesh.Get_Nfaces();
+    double NcellExt = mesh.Get_NcellExt();
+
+    //Time matrix
+    //Matrix5d TimeMat = sol.TimeMat_;
+
+    //Cubic relaxation
+    //Vector5d One = VectorXd::Constant(5, ONE);
+
+    for(int face_id = 0; face_id < Nfaces; face_id++){
+
+        //Boundary Layer Resolution performed on the faces of the PRIMAL mesh
+        if (MeshTag =="Primal"){
+
+            L = mesh.FaceIndex_(face_id,1);
+            R = mesh.FaceIndex_(face_id,2);
+
+            X_state_L = sol.ConsVar_.row(L).transpose();
+            X_state_R = sol.ConsVar_.row(R).transpose();
+        }
+        //Boundary Layer Resolution performed on the faces of the DUAL mesh
+        else{
+
+            L = mesh.FaceIndexDual_(face_id,1);
+            R = mesh.FaceIndexDual_(face_id,2);
+
+            X_state_L = sol.ConsVarDual_.row(L).transpose();
+            X_state_R = sol.ConsVarDual_.row(R).transpose();
+        }
+
+        if(VariableType=="ConsVar"){
+
+            W_state_L = ConsVarToNConsVarLoc(X_state_L, sol.SolTherm_);
+            W_state_R = ConsVarToNConsVarLoc(X_state_R, sol.SolTherm_);
+            NConsFlux = NConsFluxLoc(W_state_L, W_state_R, sol.SolTherm_);
+            Flux_L    = ConsVarFlux(W_state_L, sol.SolTherm_); 
+            Flux_R    = ConsVarFlux(W_state_R, sol.SolTherm_); 
+
+            H_state_avr = NConsVarAveraged(X_state_L, X_state_R, weight_L);
+
+            H_state_copy = H_state_avr;
+
+            //FIXME
+            
+            //Estimation the time-relaxation of U_L
+            //dtRelax_face_ini   = dtRelax;
+            //dtRelax_face_end   = dtRelax;
+            //dtRelax_face_estim = dtRelax;
+            //TimeStepIteCounter = 0;
+
+            //FIXME
+            //KEEPING THE TIME STEP USED FOR THE DESIRED ACCURACY ROSENBROCK
+            //dtRelax_estim = min(dtRelax_estim, dtRelax_face_estim);
+
+            //Gathering of the solution
+            H_state_avr = H_state_copy -\
+                          (dtRelax/SpaceStep)*(Flux_R - Flux_L)+\
+                          (dtRelax/SpaceStep)*NConsFlux;
+
+            //Update of the staggered solution
+
+            //PRIMAL mesh --> DUAL update
+            if (MeshTag =="Primal"){
+
+                sol.ConsVarDual_.row(face_id) = H_state_avr.transpose();
+
+                if (LeftBCType=="transparent" && RightBCType=="transparent" ){
+
+                    sol.ConsVarDual_.row(0)          = sol.ConsVarDual_.row(1);
+                    sol.ConsVarDual_.row(NcellExt-1) = sol.ConsVarDual_.row(NcellExt-2);
+
+                }
+
+            }
+            //DUAL mesh --> PRIMAL update + Imposed boundary conditions
+            else{
+
+                sol.ConsVar_.row(face_id+1) = H_state_avr.transpose();
+
+                if (LeftBCType=="transparent" && RightBCType=="transparent" ){
+
+                    sol.ConsVar_.row(0)          = sol.ConsVar_.row(1);
+                    sol.ConsVar_.row(NcellExt-1) = sol.ConsVar_.row(NcellExt-2);
+
+                }
+            }
+        }
+
+    }
+
+}
+
+Vector5d NConsFluxLoc(Vector5d& W_state_L, Vector5d& W_state_R,\
+        ThermoLaw& Therm){
+
+    Vector5d NConsFlux;
+
+    //Local variables
+    double alpha1_L = W_state_L(0);
+    //double alpha2_L = ONE - alpha1_L;
+    //double u1_L     = W_state_L(2);
+    double u2_L     = W_state_L(4);
+    double p1_L     = W_state_L(1);
+    //double p2_L     = W_state_L(3);
+
+    double alpha1_R = W_state_R(0);
+    //double alpha2_R = ONE - alpha1_R;
+    //double u1_R     = W_state_R(2);
+    double u2_R     = W_state_R(4);
+    double p1_R     = W_state_R(1);
+    //double p2_R     = W_state_R(3);
+
+    double uI = ONE_OVER_TWO*(u2_L + u2_R); 
+    double pI = ONE_OVER_TWO*(p1_L + p1_R); 
+
+//    NConsFlux<<-uI*(alpha1_R - alpha1_L),
+//               ZERO,
+//               -(alpha2_R*p2_R - alpha2_L*p2_L),
+//               ZERO,
+//                (alpha2_R*p2_R - alpha2_L*p2_L);
+    
+    NConsFlux<<-uI*(alpha1_R - alpha1_L),
+               ZERO,
+               +pI*(alpha1_R - alpha1_L),
+               ZERO,
+               -pI*(alpha1_R - alpha1_L);
+
+/* Test Non-conservative product of Ambroso, Chalons, Galié */
+/*
+    //Construction de la constante de relaxation
+    double rho1_L = Density_EOS(1, Therm, p1_L, ZERO); 
+    double rho1_R = Density_EOS(1, Therm, p1_R, ZERO); 
+    double c1_L   = Sound_Speed_EOS(1, Therm, rho1_L, p1_L);
+    double c1_R   = Sound_Speed_EOS(1, Therm, rho1_R, p1_R);
+    double a1 = 1.1*max(rho1_L*c1_L, rho1_R*c1_R);
+
+    //Construction des quantités de la discontinuité de contact
+    //On suppose U_L donné on construit U+
+    double m = alpha1_L*rho1_L*(u1_L - u2_L);
+    double cofac = (m/(alpha1_R*a1) - ONE)/(m/(alpha1_L*a1) - ONE);
+
+    if (cofac < ZERO){
+
+        cout<<"Inside NConsFlux BS: cofac < 0, rho1_p can not be computed"<<endl;
+        exit(EXIT_FAILURE);
+    }
+
+    double rho1_p = sqrt(cofac)*rho1_L;
+    double u1_p   = m/(alpha1_R*rho1_p) + u2_L;
+
+    double a2p2_jump = m*(u1_L - u1_p) - p1_L*(alpha1_R - alpha1_L)\
+                       -alpha1_R*a1*a1*(ONE/rho1_L - ONE/rho1_p);
+
+    NConsFlux<<-uI*(alpha1_R - alpha1_L),
+               ZERO,
+               -a2p2_jump,
+               ZERO,
+               +a2p2_jump;
+*/
+    return NConsFlux;
 }
 
 void Solver_Isen::BoundaryLayerTimeStepUpdate(Sol_Isen& sol, Mesh& mesh){
@@ -456,15 +673,33 @@ void Solver_Isen::BoundaryLayer(Sol_Isen& sol, Mesh& mesh){
 
         //Update starting from PRIMAL face
 
-        BoundaryLayerUpdate(sol, mesh, MeshTag,\
-                TimeStep, TimeStep_estim, VariableType);
+        if(sol.SolType_=="BN Relaxation"){
+
+            BN_BoundaryLayerUpdate(sol, mesh, MeshTag,\
+                    TimeStep, TimeStep_estim, VariableType);
+        }
+
+        else{
+
+            BoundaryLayerUpdate(sol, mesh, MeshTag,\
+                    TimeStep, TimeStep_estim, VariableType);
+        }
 
         MeshTag = "Dual";
 
         //Update starting from DUAL face
 
-        BoundaryLayerUpdate(sol, mesh, MeshTag,\
-                TimeStep, TimeStep_estim, VariableType);
+        if(sol.SolType_=="BN Relaxation"){
+
+            BN_BoundaryLayerUpdate(sol, mesh, MeshTag,\
+                    TimeStep, TimeStep_estim, VariableType);
+        }
+
+        else{
+
+            BoundaryLayerUpdate(sol, mesh, MeshTag,\
+                    TimeStep, TimeStep_estim, VariableType);
+        }
 
         //Pauline Lafitte & Thomas Rey Idea
         //Storage of the solution at time NRelax-1 and NRelax
@@ -1058,8 +1293,12 @@ void Solver_Isen::Simulation(Sol_Isen& sol, Mesh& mesh,\
             //Classical Update of the time step
             TimeElapsed_+=TimeStep_;
 
-            //Boundary Layer Resolution part during: TimeStep_ = convection time scale
-            BoundaryLayerFracStep(sol, mesh);
+            if(SourceTermType_!="none"){
+
+                //Boundary Layer Resolution part during: TimeStep_ = convection time scale
+                BoundaryLayerFracStep(sol, mesh);
+
+            }
 
             //Update of the conservative flux
             ConsVarFluxUpdate(sol, mesh);
@@ -3083,6 +3322,81 @@ void NonLinearSpringExactSolution(Vector5d& U_state_exact, Vector5d& U_state_ini
 
 }
 
+//Derive the real source term of the isentropic BN system
+void IsenBNSourceTerm(double tauU, double tauP, double pref, double rhoref,\
+        Vector5d& U_state, Vector5d& STerm,\
+        ThermoLaw& Therm
+        ){
+
+    Vector5d W_state = ConsVarToNConsVarLoc(U_state, Therm);
+
+    double alpha1 = W_state(0);
+    double p1     = W_state(1);
+    double u1     = W_state(2);
+    double p2     = W_state(3);
+    double u2     = W_state(4);
+
+    double alpha2 = ONE - alpha1;
+
+    //Source term: Alpha 1 
+    STerm(0) = - (alpha1*alpha2/tauP)*(p2 - p1)/pref; 
+    STerm(1) = ZERO; 
+    STerm(2) =  (alpha1*alpha2/tauU)*(u2 - u1)*rhoref; 
+    STerm(3) = ZERO; 
+    STerm(4) = - (alpha1*alpha2/tauU)*(u2 - u1)*rhoref; 
+}
+
+Matrix5d IsenBNSourceTermGradient(double tauU, double tauP, double pref, double rhoref,\
+        Vector5d& U_state,\
+        ThermoLaw& Therm
+        ){
+
+    double m1 = U_state(1);
+    double m2 = U_state(3);
+
+    Vector5d W_state = ConsVarToNConsVarLoc(U_state, Therm);
+
+    double alpha1 = W_state(0);
+    double p1     = W_state(1);
+    double u1     = W_state(2);
+    double p2     = W_state(3);
+    double u2     = W_state(4);
+    double du     = u2 - u1;
+    double dp     = p2 - p1;
+
+    double alpha2 = ONE - alpha1;
+    double rho1   = Density_EOS(1, Therm, p1, ZERO);
+    double rho2   = Density_EOS(2, Therm, p2, ZERO);
+    double c1     = Sound_Speed_EOS(1, Therm, rho1, p1);
+    double c2     = Sound_Speed_EOS(1, Therm, rho2, p2);
+    double C1     = rho1*c1*c1;
+    double C2     = rho2*c2*c2;
+    double Prel   = alpha1*C2 + alpha2*C1;
+
+    double K  = alpha1*alpha2;
+    double Kt = (ONE - TWO*alpha1);
+
+    Matrix5d BN_Source_Gradient = MatrixXd::Zero(5,5);
+
+    //Row Alpha1
+    RowVector5d RowAlpha1;
+    RowAlpha1<<-(Kt/tauP)*(dp/pref) -(ONE/tauP)*(Prel/pref),\
+        (K/(pref*tauP))*(C1/m1), ZERO, -(K/(pref*tauP))*(C2/m2), ZERO;
+
+    //Row U
+    RowVector5d RowU1;
+    RowU1<< (Kt/tauU)*rhoref*du,\
+        (K/tauU)*(rhoref*u1/m1),-(K/tauU)*(rhoref/m1),\
+       -(K/tauU)*(rhoref*u2/m2), (K/tauU)*(rhoref/m2);
+
+    BN_Source_Gradient.row(0) = RowAlpha1;
+    BN_Source_Gradient.row(2) = RowU1;
+    BN_Source_Gradient.row(4) = -RowU1;
+
+    return BN_Source_Gradient;
+
+}
+
 /************************************************/
 /*****************  CONVECTION  *****************/
 /************************************************/
@@ -3296,6 +3610,8 @@ void Convergence_Curve(\
         bool CFL_ramp, int CFL_ramp_range,\
         double CourantBL, double CourantConv,\
         bool FractionalStep,\
+        string SourceTermType,\
+        string TimeIntegrationType,\
         int NRelax,\
         double pRef, double mRef,\
         Vector3d& tauRelax,\
@@ -3372,6 +3688,8 @@ void Convergence_Curve(\
 	    //Solver building
         Solver_Isen solver_try(\
                 FractionalStep,\
+                SourceTermType,\
+                TimeIntegrationType,\
                 NRelax, CourantBL,\
                 SchemeTypeCons, SchemeTypeNCons,\
                 CourantConv,\

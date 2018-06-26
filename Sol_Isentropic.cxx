@@ -162,6 +162,30 @@ Sol_Isen::Sol_Isen(Mesh& M,\
         Therm\
         );
 
+    //Dirac MassFrozen
+    Vector5d Uinit_avr = NConsVarToConsVarLoc(Init_avr, Therm);
+    
+    double alpha1_L = InitL_(0);
+    double alpha1_R = InitR_(0);
+
+    double m1_avr = Uinit_avr(1);
+    double u1_avr = Init_avr(2);
+    double p1_avr = Init_avr(1);
+
+    double m2_avr = Uinit_avr(3);
+    double u2_avr = Init_avr(4);
+    double p2_avr = Init_avr(3);
+
+    double m_avr  = m1_avr + m2_avr;
+    double uI_frozen = (m1_avr/m_avr)*u1_avr + (m2_avr/m_avr)*u2_avr; 
+    double pI_frozen = (m2_avr/m_avr)*p1_avr + (m1_avr/m_avr)*p2_avr;
+
+    DiracMassFrozen_ << -uI_frozen*(alpha1_R - alpha1_L),
+                        ZERO,
+                        +pI_frozen*(alpha1_R - alpha1_L),
+                        ZERO,
+                        -pI_frozen*(alpha1_R - alpha1_L);
+
     Vector5d EigenvaluesFrozen = IsentropicBN_Eigenvalues(\
                 Init_avr,\
                 Therm\
@@ -687,7 +711,7 @@ void Sol_Isen::SolExact_Update(Mesh& mesh, double time){
         }
 
     }
-    else if(SolType_== "Shock Contact"){
+    else if(SolType_== "Shock Contact" || SolType_=="BN Relaxation"){
 
        double sigma1Shock =  -839.323232317123598;
        double sigma2Shock =  -528.970548257695896;

@@ -97,8 +97,9 @@ int main(int argc, char* argv[])
     double pRef;
     double mRef;
 
-    bool SourceTerm;
+    string SourceTermType;
     bool FractionalStep;
+    string TimeIntegrationType;
     int NRelax;
     
     //Boundary Conditions 
@@ -275,14 +276,9 @@ int main(int argc, char* argv[])
                     mRef = stod(key_str_info);
                     cout<<"pRef: "<<pRef<<", mRef: "<<mRef<<endl;
                 }
-                else if(key_word=="SOURCE_TERM"){
+                else if(key_word=="SOURCE_TERM_TYPE"){
                     getline(fichier,key_str_info, end_of_line);
-                    if(key_str_info=="true"){
-                        SourceTerm = true;
-                    }
-                    else{
-                        SourceTerm = false;
-                    }
+                    SourceTermType=key_str_info;
                 }
                 else if(key_word=="FRACTIONAL_STEP"){
                     getline(fichier,key_str_info, end_of_line);
@@ -294,17 +290,21 @@ int main(int argc, char* argv[])
                         FractionalStep = false;
                     }
                 }
+                else if(key_word=="TIME_INTEGRATION_TYPE"){
+                    getline(fichier,key_str_info, end_of_line);
+                    TimeIntegrationType=key_str_info;
+                }
                 else if(key_word=="NRELAX"){
                     getline(fichier,key_str_info, end_of_line);
                     NRelax = stoi(key_str_info);
                     if(FractionalStep==true){
 
-                        cout<<"FractionalStep: "<<FractionalStep<<", SourceTerm: "<<SourceTerm<<\
+                        cout<<"FractionalStep: "<<FractionalStep<<", SourceTermType: "<<SourceTermType<<\
                             ", NO BS RELAXATION"<<endl;
                     }
                     else{
-                        cout<<"FractionalStep: "<<FractionalStep<<", SourceTerm: "<<SourceTerm<<\
-                            ", NRelax: "<<NRelax<<endl;
+                        cout<<"FractionalStep: "<<FractionalStep<<", SourceTermType: "<<SourceTermType<<\
+                            ", NRelax: "<<NRelax<<", Time-integration: "<<TimeIntegrationType<<endl;
                     }
                 }
                 else if(key_word=="LEFT_BC_TYPE"){
@@ -647,6 +647,8 @@ int main(int argc, char* argv[])
         CFL_ramp, CFL_ramp_range, \
         CourantBL, CourantConv,\
         FractionalStep,\
+        SourceTermType,\
+        TimeIntegrationType,\
         NRelax,\
         pRef, mRef,\
         tauRelax,\

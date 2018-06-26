@@ -52,6 +52,7 @@ class Sol_Isen
     //Frozen Jacobian matrix, Frozen Rusanov radius
     //built with (InitR_ + InitL_)/2
     Matrix5d JacConvFrozen_;
+    Vector5d DiracMassFrozen_;
     double   EigenvaluesFrozen_;
     Matrix5d TimeMat_;
     Vector5d W_eq_;

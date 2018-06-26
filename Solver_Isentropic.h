@@ -48,6 +48,8 @@ class Solver_Isen
  
         string FileOutputFormat_;
         bool FractionalStep_;
+        string SourceTermType_;
+        string TimeIntegrationType_;
 
         /************************************************/
         /***************  BOUNDARY LAYER  ***************/
@@ -90,6 +92,8 @@ class Solver_Isen
         //constructor:
         Solver_Isen(\
                 bool FractionalStep,\
+                string SourceTermType,\
+                string TimeIntegrationType,\
                 int NRelax, double CourantBL,\
                 string SchemeTypeCons, string SchemeTypeNCons,\
                 double CourantConv,\
@@ -117,6 +121,11 @@ class Solver_Isen
         //Resolution of the time boundary layer related to the relaxation processes
         void BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,\
                 double& dtRelax, double& dtRelax_estim, string VariableType);
+
+        //BN Resolution of the time boundary layer related to the relaxation processes
+        void BN_BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,\
+                double& dtRelax, double& dtRelax_estim, string VariableType);
+
 
         //Update dtRelax_ using the relaxation cofactors and the Jacobian eigenvalues
         void BoundaryLayerTimeStepUpdate(Sol_Isen& sol, Mesh& mesh);
@@ -249,6 +258,11 @@ void BoundaryLayerResolutionLocalConsVar(\
         double SpaceStep\
         );
 
+//Returns the non-conservative flux à la Ambroso Galié Chalons
+Vector5d NConsFluxLoc(Vector5d& W_state_L, Vector5d& W_state_R,\
+        ThermoLaw& Therm\
+        );
+
 /********** exact solution functions ************/
 
 //Returns the solution of the boundary layer dynamics when A(jacobian) = c0*Id
@@ -325,6 +339,18 @@ Vector5d LinearSpringGradient(Matrix5d& TauMat, Vector5d& U_state, Vector5d& U_e
 void NonLinearSpring(Matrix5d& TauMat, Vector5d& U_state, Vector5d& U_eq, Vector5d& STerm,\
         Matrix5d& EigenVectorBasis, Matrix5d& EigenVectorBasisInv);
 
+//Derive the real source term of the isentropic BN system
+void IsenBNSourceTerm(double tauU, double tauP, double pref, double rhoref,\
+        Vector5d& U_state, Vector5d& STerm,\
+        ThermoLaw& Therm
+        );
+
+//Derive the real source term gradient of the isentropic BN system
+Matrix5d IsenBNSourceTermGradient(double tauU, double tauP, double pref, double rhoref,\
+        Vector5d& U_state,\
+        ThermoLaw& Therm
+        );
+
 //Returns the diagonal vector of the source term jacobian related to a non-linear cubic spring
 Vector5d NonLinearSpringGradient(Matrix5d& TauMat, Vector5d& U_state, Vector5d& U_eq,\
         Matrix5d& EigenVectorBasisInv);
@@ -372,6 +398,8 @@ void Convergence_Curve(\
         bool CFL_ramp, int CFL_ramp_range, \
         double CourantBL, double CourantConv,\
         bool FractionalStep,\
+        string SourceTermType,\
+        string TimeIntegrationType,\
         int NRelax,\
         double pRef, double mRef,\
         Vector3d& tauRelax,\
