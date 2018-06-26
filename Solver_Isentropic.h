@@ -303,8 +303,7 @@ void RosenBrockFourthOrder(\
         Matrix5d& EigenVectorBasis, Matrix5d& EigenVectorBasisInv,\
         Vector5d& U_state_ini, Vector5d& U_state_ref, Vector5d& U_eq,\
         Vector5d& STerm_ini, Vector5d& JacVector_ini, Vector5d& One,\
-        double& dtRelax_ini, double& dtRelax_end, double& dtRelax_estim,\
-        int& TimeStepIteCounter\
+        double& dtRelax_ini\
         );
 
 //Euler Implicit of order 1 method
@@ -313,8 +312,7 @@ void ImplicitEuler(\
         Matrix5d& EigenVectorBasis, Matrix5d& EigenVectorBasisInv,\
         Vector5d& U_state_ini, Vector5d& U_state_ref, Vector5d& U_eq,\
         Vector5d& STerm_ini, Vector5d& JacVector_ini, Vector5d& One,\
-        double& dtRelax_ini, double& dtRelax_end, double& dtRelax_estim,\
-        int& TimeStepIteCounter\
+        double& dtRelax_ini\
         );
 
 //Explicit Runge-Kutta of order 4 method
@@ -323,8 +321,7 @@ void RungeKuttaFourthOrder(\
         Matrix5d& EigenVectorBasis, Matrix5d& EigenVectorBasisInv,\
         Vector5d& U_state_ini, Vector5d& U_state_ref, Vector5d& U_eq,\
         Vector5d& STerm_ini,\
-        double& dtRelax_ini, double& dtRelax_end, double& dtRelax_estim,\
-        int& TimeStepIteCounter\
+        double& dtRelax_ini\
         );
 
 //Update the source term corresponding to a linear spring
