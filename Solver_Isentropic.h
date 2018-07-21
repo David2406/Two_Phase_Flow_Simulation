@@ -315,6 +315,13 @@ void ImplicitEuler(\
         double& dtRelax_ini\
         );
 
+//Euler Implicit of order 1 method for Baer-Nunziato 
+void BN_ImplicitEuler(\
+        Vector5d& U_state_ini,\
+        Vector5d& STerm_ini, Matrix5d& JacMatrix_ini, Matrix5d& Id,\
+        double& dtRelax_ini\
+        );
+
 //Explicit Runge-Kutta of order 4 method
 void RungeKuttaFourthOrder(\
         Matrix5d& TauMat,\
@@ -370,11 +377,19 @@ Vector5d ConsVarFluxUpdateLoc(\
         string SchemeTypeCons\
         );
 
+/*************** RUSANOV ******************/
+
 // Returns the spectral radius used as diffusion coefficient in the Rusanov scheme
 double SpectralRadiusRusanov(\
         Vector5d& W_state_L, Vector5d& W_state_R,\
         ThermoLaw& Therm\
         );
+
+/*************** HLLAC ***********************/
+
+//Return the eigenvalues wave speed for the HLLC scheme
+Vector4d WaveSpeedEstimate(Vector5d& W_state_L, Vector5d& W_state_R,\
+                ThermoLaw& Therm);
 
 //Returns the local timestep based on the Jacobian eigenvalues
 double LocalCourant_Conv(Vector5d& W_state_L, Vector5d& W_state_R,\

@@ -110,11 +110,14 @@ Sol_Isen::Sol_Isen(Mesh& M,\
            1.;
 
     //Equilibrium state
-    W_eq_<<0.6,
-        1.5e7,
-        1.,
-        1.5e7,
-        1.;
+    
+    W_eq_<<0.5,
+        3.e5,
+        3.,
+        3.e5,
+        3.;
+        
+    //W_eq_ = VectorXd::Zero(5);
 
     //Time matrix
     //Time relaxation exponential operator
@@ -139,8 +142,8 @@ Sol_Isen::Sol_Isen(Mesh& M,\
          ONE,
          ONE,
          ONE;
-    TimeMat_ = TimeRelaxMat(U_state_ref, Relax_mu);
-    //TimeMat_ = TimeRelaxMat(One, Relax_mu);
+    //TimeMat_ = TimeRelaxMat(U_state_ref, Relax_mu);
+    TimeMat_ = TimeRelaxMat(One, Relax_mu);
     TimeMat_         *= (ONE/etaRelax_(0));
 
     //Eigenvector base matrix
@@ -179,6 +182,9 @@ Sol_Isen::Sol_Isen(Mesh& M,\
     double m_avr  = m1_avr + m2_avr;
     double uI_frozen = (m1_avr/m_avr)*u1_avr + (m2_avr/m_avr)*u2_avr; 
     double pI_frozen = (m2_avr/m_avr)*p1_avr + (m1_avr/m_avr)*p2_avr;
+
+    //uI_Frozen_=uI_frozen;
+    uI_Frozen_=100.;
 
     DiracMassFrozen_ << -uI_frozen*(alpha1_R - alpha1_L),
                         ZERO,
@@ -775,112 +781,87 @@ void Sol_Isen::SolExact_Update(Mesh& mesh, double time){
 
         double weight_L      = ONE_OVER_TWO;
         Vector5d W_state_avr = NConsVarAveraged(InitL_, InitR_, weight_L);
-        Vector5d W_update, V_update;
+        Vector5d U_update, W_update, V_update;
 
-        Vector5d r_0, r_1, r_2, r_3, r_4;
-        double a_0, a_1, a_2, a_3, a_4;
-
-        Vector5d U_ini;
+        //Used to compute the exact solution
+        double aCoordsIni;
+        Vector5d PureConvVector;
 
         //Eigenvector base matrix
-        Matrix5d RmatEigenVectors = IsentropicBN_Eigenvectors(\
-                VariableType_,\
-                W_state_avr,\
-                SolTherm_\
-                );
+        Matrix5d RmatEigenVectors = EigenVectorBasis_;
+
+        //EigenvectorInv base matrix
+        Matrix5d RmatEigenVectorsInv = EigenVectorBasisInv_;
 
         //Coords of InitR_ - InitL_ in the eigenvector base
-        Vector5d CoordsEigenVectors = \
-            IsentropicBN_EigenvectorsBaseProjectionCons(\
-                     W_state_avr,\
-                     InitL_, InitR_,\
-                     SolTherm_);
+
+        Vector5d U_state_L = NConsVarToConsVarLoc(InitL_, SolTherm_);
+        Vector5d U_state_R = NConsVarToConsVarLoc(InitR_, SolTherm_);
+        Vector5d DeltaCoords = RmatEigenVectorsInv*(U_state_R - U_state_L);
+        Vector5d InitLCoords = RmatEigenVectorsInv*(U_state_L);
+
+        //Heaviside function according to the eigenvalues
+        Vector5d H_Eigen;
+        double H_uI_Frozen;
 
         //Ordering of the eigenvalues
-        int Index0, Index1, Index2, Index3, Index4;
         Vector5d EigenValues = IsentropicBN_Eigenvalues(\
                 W_state_avr,\
                 SolTherm_\
                 );
 
-        //Test u1-c1 VS u2-c2
-        if (EigenValues(2)< EigenValues(4)){
+        //Dirac mass vector
+        Vector5d Dirac_Jump = RmatEigenVectorsInv*DiracMassFrozen_;
+        for(int nVar=0;nVar<5;nVar++){
 
-            Index0 = 2;
-            Index1 = 4;
+            Dirac_Jump(nVar) /= (EigenValues(nVar) - uI_Frozen_);
+
         }
-        else{
 
-            Index0 = 4;
-            Index1 = 2;
-        }
-        //Test u1+c1 VS u2+c2
-        if (EigenValues(1)< EigenValues(3)){
-
-            Index3 = 1;
-            Index4 = 3;
-        }
-        else{
-
-            Index3 = 3;
-            Index4 = 1;
-        }
-        //u2
-        Index2 = 0;
-
-        r_0 = RmatEigenVectors.col(Index0);
-        a_0 = CoordsEigenVectors(Index0);
-
-        r_1 = RmatEigenVectors.col(Index1);
-        a_1 = CoordsEigenVectors(Index1);
-        
-        r_2 = RmatEigenVectors.col(Index2);
-        a_2 = CoordsEigenVectors(Index2);
-        
-        r_3 = RmatEigenVectors.col(Index3);
-        a_3 = CoordsEigenVectors(Index3);
-        
-        r_4 = RmatEigenVectors.col(Index4);
-        a_4 = CoordsEigenVectors(Index4);
+        //Result
+        Vector5d Result;
+        Result<<ZERO,
+                ZERO,
+                ZERO,
+                ZERO,
+                ZERO;
 
         for (int cell=0; cell<NcellExt; cell++){
 
             xcell=mesh.CellCoordsTab_(cell,1);
-            U_ini = NConsVarToConsVarLoc(InitL_,SolTherm_);
+            H_Eigen<<Heaviside(xcell-x_0_, time, EigenValues(0)),
+                     Heaviside(xcell-x_0_, time, EigenValues(1)),
+                     Heaviside(xcell-x_0_, time, EigenValues(2)),
+                     Heaviside(xcell-x_0_, time, EigenValues(3)),
+                     Heaviside(xcell-x_0_, time, EigenValues(4));
 
-            if(xcell<=x_0_+time*EigenValues(Index0)){
+            H_uI_Frozen = Heaviside(xcell-x_0_, time, uI_Frozen_); 
 
+            PureConvVector = InitLCoords + DeltaCoords.cwiseProduct(H_Eigen);
+
+            for(int nVar=0;nVar<5;nVar++){
+
+                aCoordsIni   = PureConvVector(nVar);
+
+                Result(nVar) = aCoordsIni -\
+                        Dirac_Jump(nVar)*Heaviside(xcell-x_0_, time, EigenValues(nVar));
             }
-            else if(xcell<=x_0_+time*EigenValues(Index1)){
 
-                U_ini = U_ini + a_0*r_0;
-            }
-            else if(xcell<=x_0_+time*EigenValues(Index2)){
-
-                U_ini = U_ini + a_0*r_0 + a_1*r_1;
-            }
-            else if(xcell<=x_0_+time*EigenValues(Index3)){
-
-                U_ini = U_ini + a_0*r_0 + a_1*r_1 + a_2*r_2;
-            }
-            else if(xcell<=x_0_+time*EigenValues(Index4)){
-
-                U_ini = U_ini + a_0*r_0 + a_1*r_1 + a_2*r_2 + a_3*r_3;
-            }
-            else{
-
-                U_ini = U_ini + a_0*r_0 + a_1*r_1 + a_2*r_2 + a_3*r_3 + a_4*r_4;
-            }
+            U_update = RmatEigenVectors*Result + RmatEigenVectors*Dirac_Jump*\
+                                               H_uI_Frozen;
 
             //Update of the solution
-            W_update = ConsVarToNConsVarLoc(U_ini, SolTherm_);
+            W_update = ConsVarToNConsVarLoc(U_update, SolTherm_);
+
             V_update = NConsVarToEqRelaxLoc(W_update, SolTherm_);
 
             SolExact_.row(cell) = W_update.transpose();
             SolExactEqRelax_.row(cell) = V_update.transpose(); 
+
         }
 
     }
+
     else if(SolType_== "Linear Convection Relaxation BN"){
 
         double weight_L      = ONE_OVER_TWO;
@@ -888,8 +869,10 @@ void Sol_Isen::SolExact_Update(Mesh& mesh, double time){
         Vector5d U_update, W_update, V_update;
 
         //Used to compute the exact solution
-        double aCoordsIni, aInf;
-        Vector5d PureConvVector;
+        double aInf;
+        double aCoord_L, aCoord_R, aRelaxL, aRelaxR;
+        double aRelaxDelta, aDirac_Jump;
+        double lambda, H_eigen_loc, Delta_H;
 
         //Eigenvector base matrix
         Matrix5d RmatEigenVectors = EigenVectorBasis_;
@@ -911,21 +894,32 @@ void Sol_Isen::SolExact_Update(Mesh& mesh, double time){
 
         Vector5d U_state_L = NConsVarToConsVarLoc(InitL_, SolTherm_);
         Vector5d U_state_R = NConsVarToConsVarLoc(InitR_, SolTherm_);
-        Vector5d DeltaCoords = RmatEigenVectorsInv*(U_state_R - U_state_L);
+
         Vector5d InitLCoords = RmatEigenVectorsInv*(U_state_L);
+        Vector5d InitRCoords = RmatEigenVectorsInv*(U_state_R);
         
         Vector5d U_state_inf = NConsVarToConsVarLoc(W_eq_, SolTherm_);
-
         Vector5d U_infCoords = RmatEigenVectorsInv*U_state_inf;
+        Vector5d InitLCoordsRelax,InitRCoordsRelax;
 
         //Heaviside function according to the eigenvalues
         Vector5d H_Eigen;
+        double H_uI_Frozen;
 
         //Ordering of the eigenvalues
         Vector5d EigenValues = IsentropicBN_Eigenvalues(\
                 W_state_avr,\
                 SolTherm_\
                 );
+
+        //Dirac mass vector
+        double dirac_weight;
+        Vector5d Dirac_Jump = RmatEigenVectorsInv*DiracMassFrozen_;
+        for(int nVar=0;nVar<5;nVar++){
+
+            Dirac_Jump(nVar) /= (EigenValues(nVar) - uI_Frozen_);
+
+        }
 
         //Result
         Vector5d Result;
@@ -944,15 +938,40 @@ void Sol_Isen::SolExact_Update(Mesh& mesh, double time){
                      Heaviside(xcell-x_0_, time, EigenValues(3)),
                      Heaviside(xcell-x_0_, time, EigenValues(4));
 
-            PureConvVector = InitLCoords + DeltaCoords.cwiseProduct(H_Eigen);
+            H_uI_Frozen = Heaviside(xcell-x_0_, time, uI_Frozen_); 
+
+            /*
+            cout<<"xcell = "<<xcell<<endl;
+            cout<<"H_Eigen_uI_frozen = "<<H_uI_Frozen<<endl;
+            */
 
             for(int nVar=0;nVar<5;nVar++){
 
-                aCoordsIni   = PureConvVector(nVar);
-                aInf         = U_infCoords(nVar);
+                aCoord_L    = InitLCoords(nVar);
+                aCoord_R    = InitRCoords(nVar);
+                aInf        = U_infCoords(nVar);
+                dirac_weight = Dirac_Jump(nVar);
                 Tk = tauvec(nVar);
+                lambda      = EigenValues(nVar);
+                H_eigen_loc = Heaviside(xcell-x_0_, time, lambda);
+                Delta_H = H_eigen_loc - H_uI_Frozen;
 
-                Result(nVar) = (ONE-exp(-Tk*time))*aInf + exp(-Tk*time)*aCoordsIni;
+                InitLCoordsRelax(nVar) = (ONE-exp(-Tk*time))*aInf +\
+                                         exp(-Tk*time)*aCoord_L;  
+                aRelaxL = InitLCoordsRelax(nVar);
+
+                InitRCoordsRelax(nVar) = (ONE-exp(-Tk*time))*aInf +\
+                                         exp(-Tk*time)*aCoord_R;
+                aRelaxR = InitRCoordsRelax(nVar);
+
+                aRelaxDelta = aRelaxL + (aRelaxR - aRelaxL)*H_eigen_loc; 
+
+                aDirac_Jump  = AkRelaxDiracTest(xcell - x_0_, time,\
+                        uI_Frozen_, lambda,\
+                        dirac_weight, Tk); 
+
+                Result(nVar) = -aDirac_Jump*Delta_H;
+                Result(nVar) += aRelaxDelta;
 
             }
 
@@ -2527,6 +2546,57 @@ double Heaviside(double x, double time, double lambda){
 
     return Big;
 }
+
+double AkRelaxDirac(double x, double t,\
+        double uI_Frozen, double lambda_k,\
+        double ak, double ak_eq,\
+        double dirac_weight, double tauvec){
+
+    /*
+    double ak_star = ak + dirac_weight/fabs(lambda_k - uI_Frozen);
+    double tcofac = tauvec*(x - uI_Frozen*t)/(lambda_k - uI_Frozen);
+
+    double result = ak_star*exp(-tcofac) + ak_eq*(ONE - exp(-tcofac));
+    */
+
+    double result = ZERO;
+    double vmax = max(uI_Frozen, lambda_k);
+    double vmin = min(uI_Frozen, lambda_k);
+
+    if( x< vmax*t && x> vmin*t){
+
+        double tcofac  = tauvec*(x -lambda_k*t)/(uI_Frozen - lambda_k);
+        double tcofac2 = tauvec*(x - uI_Frozen*t)/(lambda_k - uI_Frozen);
+
+        double ak_relax = ak*exp(-tcofac) + ak_eq*(ONE - exp(-tcofac)); 
+        double ak_star  = ak_relax + dirac_weight/fabs(lambda_k - uI_Frozen);
+
+        result = ak_star*exp(-tcofac2) + ak_eq*(ONE - exp(-tcofac2));
+    }
+
+    return result;
+
+}
+
+double AkRelaxDiracTest(double x, double t,\
+        double uI_Frozen, double lambda_k,\
+        double dirac_weight, double tauvec){
+
+    double result = ZERO;
+    double vmax = max(uI_Frozen, lambda_k);
+    double vmin = min(uI_Frozen, lambda_k);
+    double tcofac  = ZERO;
+
+    if( x< vmax*t && x> vmin*t){
+
+        tcofac = tauvec*(x - uI_Frozen*t)/(lambda_k - uI_Frozen);
+        result = dirac_weight*exp(-tcofac);
+    }
+
+    return result;
+
+}
+
 
 Matrix5d TimeRelaxMat(Vector5d& U_state_ref, Vector5d& TimeWeight){
 

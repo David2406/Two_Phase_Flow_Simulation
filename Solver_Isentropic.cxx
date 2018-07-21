@@ -75,6 +75,7 @@ void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,
 
     //Local variables
     int L,R;
+    double x_face;
     Vector5d X_state_L, X_state_R;
     Vector5d H_state_avr, H_state_copy;
     //Matrix5d LinJac_L, LinJac_R;
@@ -105,17 +106,8 @@ void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,
     int Nfaces      = mesh.Get_Nfaces();
     double NcellExt = mesh.Get_NcellExt();
 
-    //Linearized Jacobian
-    //Vector5d W_state0 = ONE_OVER_TWO*(sol.InitL_ + sol.InitR_);
-    //LinJac_L = LinearizedJacobian(W_state0, VariableType, sol.SolTherm_); 
-    //LinJac_R = LinearizedJacobian(W_state0, VariableType, sol.SolTherm_); 
     LinJac_R  = sol.JacConvFrozen_;
     DiracMass = sol.DiracMassFrozen_;
-
-
-    //FIXME
-    //LinJac_L = MatrixXd::Zero(5,5); 
-    //LinJac_R = MatrixXd::Zero(5,5); 
 
     //Reference state
     Vector5d U_state_ref = NConsVarToConsVarLoc(sol.W_ref_, sol.SolTherm_);
@@ -154,6 +146,8 @@ void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,
             L = mesh.FaceIndex_(face_id,1);
             R = mesh.FaceIndex_(face_id,2);
 
+            x_face = mesh.FaceIndex_(face_id,3);
+
             X_state_L = sol.ConsVar_.row(L).transpose();
             X_state_R = sol.ConsVar_.row(R).transpose();
         }
@@ -163,16 +157,11 @@ void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,
             L = mesh.FaceIndexDual_(face_id,1);
             R = mesh.FaceIndexDual_(face_id,2);
 
+            x_face = mesh.FaceIndexDual_(face_id,3);
+
             X_state_L = sol.ConsVarDual_.row(L).transpose();
             X_state_R = sol.ConsVarDual_.row(R).transpose();
         }
-
-        //Jacobian Matrices Construction
-        //FIXME
-        /*
-        LinJac_L = LinearizedJacobian(W_state_L, VariableType, sol.SolTherm_); 
-        LinJac_R = LinearizedJacobian(W_state_R, VariableType, sol.SolTherm_);
-        */
 
         if(VariableType=="ConsVar"){
 
@@ -183,153 +172,173 @@ void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,
             //No-source terms active
             if(SourceTermType_=="none"){
 
-                //Gathering of the solution
-                H_state_avr = H_state_copy\
-                              -(dtRelax/SpaceStep)*LinJac_R*(X_state_R - X_state_L)\
-                              +(dtRelax/SpaceStep)*DiracMass;
+                if(abs(x_face-sol.x_0_-sol.uI_Frozen_*TimeElapsed_)<\
+                        ONE_OVER_TWO*SpaceStep){
+
+                    //Gathering of the solution
+                    H_state_avr = H_state_copy\
+                                  -(dtRelax/SpaceStep)*LinJac_R*(X_state_R - X_state_L)\
+                                  +(dtRelax/SpaceStep)*DiracMass;
+                }
+                else{
+
+                    //Gathering of the solution
+                    H_state_avr = H_state_copy\
+                                  -(dtRelax/SpaceStep)*LinJac_R*(X_state_R - X_state_L);
+                }
             }
             //Source terms are active
             else{
 
-            //Source term initialization L
-            if(sol.SolType_=="Linear Convection Relaxation BN"){
+                //Source term initialization L
+                if(sol.SolType_=="Linear Convection Relaxation BN"){
 
-                //Source term U_L
-                LinearSpring(TimeMat, X_state_L, U_state_eq, STerm_L,\
-                        RmatEigenVectors, RmatEigenVectorsInv);
+                    //Source term U_L
+                    LinearSpring(TimeMat, X_state_L, U_state_eq, STerm_L,\
+                            RmatEigenVectors, RmatEigenVectorsInv);
 
-                JacVector_L = LinearSpringGradient(TimeMat, X_state_L, U_state_eq,\
-                        RmatEigenVectorsInv);
+                    JacVector_L = LinearSpringGradient(TimeMat, X_state_L, U_state_eq,\
+                            RmatEigenVectorsInv);
 
-                //Source term U_R
-                LinearSpring(TimeMat, X_state_R, U_state_eq, STerm_R,\
-                        RmatEigenVectors, RmatEigenVectorsInv);
+                    //Source term U_R
+                    LinearSpring(TimeMat, X_state_R, U_state_eq, STerm_R,\
+                            RmatEigenVectors, RmatEigenVectorsInv);
 
-                JacVector_R = LinearSpringGradient(TimeMat, X_state_R, U_state_eq,\
-                        RmatEigenVectorsInv);
+                    JacVector_R = LinearSpringGradient(TimeMat, X_state_R, U_state_eq,\
+                            RmatEigenVectorsInv);
 
-                //Source term H
-                LinearSpring(TimeMat, H_state_copy, U_state_eq, STerm,\
-                        RmatEigenVectors, RmatEigenVectorsInv);
+                    //Source term H
+                    LinearSpring(TimeMat, H_state_copy, U_state_eq, STerm,\
+                            RmatEigenVectors, RmatEigenVectorsInv);
 
-                JacVector = LinearSpringGradient(TimeMat, H_state_copy, U_state_eq,\
-                        RmatEigenVectorsInv);
-            }
-            else if(sol.SolType_=="Linear Convection Relaxation Cubic BN"){
-            
-                //Source term U_L
-                NonLinearSpring(TimeMat, X_state_L, U_state_eq, STerm_L,\
-                        RmatEigenVectors, RmatEigenVectorsInv);
+                    JacVector = LinearSpringGradient(TimeMat, H_state_copy, U_state_eq,\
+                            RmatEigenVectorsInv);
+                }
+                else if(sol.SolType_=="Linear Convection Relaxation Cubic BN"){
 
-                JacVector_L = NonLinearSpringGradient(TimeMat, X_state_L, U_state_eq,\
-                        RmatEigenVectorsInv);
+                    //Source term U_L
+                    NonLinearSpring(TimeMat, X_state_L, U_state_eq, STerm_L,\
+                            RmatEigenVectors, RmatEigenVectorsInv);
 
-                //Source term U_R
-                NonLinearSpring(TimeMat, X_state_R, U_state_eq, STerm_R,\
-                        RmatEigenVectors, RmatEigenVectorsInv);
+                    JacVector_L = NonLinearSpringGradient(TimeMat, X_state_L, U_state_eq,\
+                            RmatEigenVectorsInv);
 
-                JacVector_R = NonLinearSpringGradient(TimeMat, X_state_R, U_state_eq,\
-                        RmatEigenVectorsInv);
+                    //Source term U_R
+                    NonLinearSpring(TimeMat, X_state_R, U_state_eq, STerm_R,\
+                            RmatEigenVectors, RmatEigenVectorsInv);
 
-                //Source term H
-                NonLinearSpring(TimeMat, H_state_copy, U_state_eq, STerm,\
-                        RmatEigenVectors, RmatEigenVectorsInv);
+                    JacVector_R = NonLinearSpringGradient(TimeMat, X_state_R, U_state_eq,\
+                            RmatEigenVectorsInv);
 
-                JacVector = NonLinearSpringGradient(TimeMat, H_state_copy, U_state_eq,\
-                        RmatEigenVectorsInv);
-            }
+                    //Source term H
+                    NonLinearSpring(TimeMat, H_state_copy, U_state_eq, STerm,\
+                            RmatEigenVectors, RmatEigenVectorsInv);
 
-            if(TimeIntegrationType_=="Rosenbrock4"){
-             
-                //Source term U_L
-                RosenBrockFourthOrder(\
-                        TimeMat,\
-                        RmatEigenVectors, RmatEigenVectorsInv,\
-                        X_state_L, U_state_ref, U_state_eq,\
-                        STerm_L, JacVector_L, One,\
-                        dtRelax_face_ini\
-                        );
+                    JacVector = NonLinearSpringGradient(TimeMat, H_state_copy, U_state_eq,\
+                            RmatEigenVectorsInv);
+                }
 
-                //Source term U_R
-               RosenBrockFourthOrder(\
-                       TimeMat,\
-                       RmatEigenVectors, RmatEigenVectorsInv,\
-                       X_state_R, U_state_ref, U_state_eq,\
-                       STerm_R, JacVector_R, One,\
-                       dtRelax_face_ini\
-                       );
-               //Source term H
-               RosenBrockFourthOrder(\
-                       TimeMat,\
-                       RmatEigenVectors, RmatEigenVectorsInv,\
-                       H_state_copy, U_state_ref, U_state_eq,\
-                       STerm, JacVector, One,\
-                       dtRelax_face_ini\
-                       );
-            }
-            else if(TimeIntegrationType_=="ImplicitEuler1"){
+                if(TimeIntegrationType_=="Rosenbrock4"){
 
-                //Source term U_L
-                ImplicitEuler(\
-                        TimeMat,\
-                        RmatEigenVectors, RmatEigenVectorsInv,\
-                        X_state_L, U_state_ref, U_state_eq,\
-                        STerm_L, JacVector_L, One,\
-                        dtRelax_face_ini\
-                        );
+                    //Source term U_L
+                    RosenBrockFourthOrder(\
+                            TimeMat,\
+                            RmatEigenVectors, RmatEigenVectorsInv,\
+                            X_state_L, U_state_ref, U_state_eq,\
+                            STerm_L, JacVector_L, One,\
+                            dtRelax_face_ini\
+                            );
 
-                //Source term U_R
-                ImplicitEuler(\
-                        TimeMat,\
-                        RmatEigenVectors, RmatEigenVectorsInv,\
-                        X_state_R, U_state_ref, U_state_eq,\
-                        STerm_R, JacVector_R, One,\
-                        dtRelax_face_ini\
-                        );
+                    //Source term U_R
+                    RosenBrockFourthOrder(\
+                            TimeMat,\
+                            RmatEigenVectors, RmatEigenVectorsInv,\
+                            X_state_R, U_state_ref, U_state_eq,\
+                            STerm_R, JacVector_R, One,\
+                            dtRelax_face_ini\
+                            );
+                    //Source term H
+                    RosenBrockFourthOrder(\
+                            TimeMat,\
+                            RmatEigenVectors, RmatEigenVectorsInv,\
+                            H_state_copy, U_state_ref, U_state_eq,\
+                            STerm, JacVector, One,\
+                            dtRelax_face_ini\
+                            );
+                }
+                else if(TimeIntegrationType_=="ImplicitEuler1"){
 
-                //Source term H
-                ImplicitEuler(\
-                        TimeMat,\
-                        RmatEigenVectors, RmatEigenVectorsInv,\
-                        H_state_copy, U_state_ref, U_state_eq,\
-                        STerm, JacVector, One,\
-                        dtRelax_face_ini\
-                        );
-            }
-            else if(TimeIntegrationType_=="ExplicitRungeKutta4"){
+                    //Source term U_L
+                    ImplicitEuler(\
+                            TimeMat,\
+                            RmatEigenVectors, RmatEigenVectorsInv,\
+                            X_state_L, U_state_ref, U_state_eq,\
+                            STerm_L, JacVector_L, One,\
+                            dtRelax_face_ini\
+                            );
 
-                //Source term U_L
-                RungeKuttaFourthOrder(\
-                        TimeMat,\
-                        RmatEigenVectors, RmatEigenVectorsInv,\
-                        X_state_L, U_state_ref, U_state_eq,\
-                        STerm_L,\
-                        dtRelax_face_ini\
-                        );
+                    //Source term U_R
+                    ImplicitEuler(\
+                            TimeMat,\
+                            RmatEigenVectors, RmatEigenVectorsInv,\
+                            X_state_R, U_state_ref, U_state_eq,\
+                            STerm_R, JacVector_R, One,\
+                            dtRelax_face_ini\
+                            );
 
-                //Source term U_R
-                RungeKuttaFourthOrder(\
-                        TimeMat,\
-                        RmatEigenVectors, RmatEigenVectorsInv,\
-                        X_state_R, U_state_ref, U_state_eq,\
-                        STerm_R,\
-                        dtRelax_face_ini\
-                        );
+                    //Source term H
+                    ImplicitEuler(\
+                            TimeMat,\
+                            RmatEigenVectors, RmatEigenVectorsInv,\
+                            H_state_copy, U_state_ref, U_state_eq,\
+                            STerm, JacVector, One,\
+                            dtRelax_face_ini\
+                            );
+                }
+                else if(TimeIntegrationType_=="ExplicitRungeKutta4"){
 
-                //Source term H
-                RungeKuttaFourthOrder(\
-                        TimeMat,\
-                        RmatEigenVectors, RmatEigenVectorsInv,\
-                        H_state_copy, U_state_ref, U_state_eq,\
-                        STerm,\
-                        dtRelax_face_ini\
-                        );
-            }
-            
-            //Gathering of the solution
-            H_state_avr = H_state_copy\
-                          -(dtRelax/SpaceStep)*LinJac_R*(X_state_R - X_state_L)\
-                          +(dtRelax/SpaceStep)*DiracMass;
+                    //Source term U_L
+                    RungeKuttaFourthOrder(\
+                            TimeMat,\
+                            RmatEigenVectors, RmatEigenVectorsInv,\
+                            X_state_L, U_state_ref, U_state_eq,\
+                            STerm_L,\
+                            dtRelax_face_ini\
+                            );
+
+                    //Source term U_R
+                    RungeKuttaFourthOrder(\
+                            TimeMat,\
+                            RmatEigenVectors, RmatEigenVectorsInv,\
+                            X_state_R, U_state_ref, U_state_eq,\
+                            STerm_R,\
+                            dtRelax_face_ini\
+                            );
+
+                    //Source term H
+                    RungeKuttaFourthOrder(\
+                            TimeMat,\
+                            RmatEigenVectors, RmatEigenVectorsInv,\
+                            H_state_copy, U_state_ref, U_state_eq,\
+                            STerm,\
+                            dtRelax_face_ini\
+                            );
+                }
+
+                if(abs(x_face-sol.x_0_-sol.uI_Frozen_*TimeElapsed_)<\
+                        ONE_OVER_TWO*SpaceStep){
+
+                    //Gathering of the solution
+                    H_state_avr = H_state_copy\
+                                  -(dtRelax/SpaceStep)*LinJac_R*(X_state_R - X_state_L)\
+                                  +(dtRelax/SpaceStep)*DiracMass;
+                }
+                else{
+
+                    //Gathering of the solution
+                    H_state_avr = H_state_copy\
+                                  -(dtRelax/SpaceStep)*LinJac_R*(X_state_R - X_state_L);
+                }
             }
 
 
@@ -380,6 +389,9 @@ void Solver_Isen::BN_BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshT
 
     //Function
 
+    Matrix5d Id;
+    Id = Eigen::Matrix<double, 5, 5>::Identity();
+
     //mesh inputs
     double SpaceStep = mesh.Get_SpaceStep();
 
@@ -391,10 +403,14 @@ void Solver_Isen::BN_BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshT
     //double tauMin = sol.etaRelax_(0);
     //double etaU   = sol.etaRelax_(1);
     //double etaP   = sol.etaRelax_(2);
+    double tauP     = sol.tauRelax_(0);
+    double tauU     = sol.tauRelax_(1);
+    double pref     = sol.pRef_;
+    double rhoref   = sol.mRef_;
 
     //Cubic relaxation 
     Vector5d STerm, STerm_L, STerm_R;
-    Vector5d JacVector, JacVector_L, JacVector_R;
+    Matrix5d JacMatrix, JacMatrix_L, JacMatrix_R;
 
     Vector5d W_state_L, W_state_R, NConsFlux, Flux_L, Flux_R;
 
@@ -433,24 +449,71 @@ void Solver_Isen::BN_BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshT
             W_state_L = ConsVarToNConsVarLoc(X_state_L, sol.SolTherm_);
             W_state_R = ConsVarToNConsVarLoc(X_state_R, sol.SolTherm_);
             NConsFlux = NConsFluxLoc(W_state_L, W_state_R, sol.SolTherm_);
-            Flux_L    = ConsVarFlux(W_state_L, sol.SolTherm_); 
-            Flux_R    = ConsVarFlux(W_state_R, sol.SolTherm_); 
+        }
 
-            H_state_avr = NConsVarAveraged(X_state_L, X_state_R, weight_L);
+        H_state_avr = NConsVarAveraged(X_state_L, X_state_R, weight_L);
 
-            H_state_copy = H_state_avr;
+        H_state_copy = H_state_avr;
 
-            //FIXME
-            
-            //Estimation the time-relaxation of U_L
-            //dtRelax_face_ini   = dtRelax;
-            //dtRelax_face_end   = dtRelax;
-            //dtRelax_face_estim = dtRelax;
-            //TimeStepIteCounter = 0;
+        //Source term U_L
+        IsenBNSourceTerm(tauU, tauP, pref, rhoref,\
+                X_state_L, STerm_L,\
+                sol.SolTherm_);
 
-            //FIXME
-            //KEEPING THE TIME STEP USED FOR THE DESIRED ACCURACY ROSENBROCK
-            //dtRelax_estim = min(dtRelax_estim, dtRelax_face_estim);
+        JacMatrix_L = IsenBNSourceTermGradient(tauU, tauP, pref, rhoref,\
+                X_state_L,\
+                sol.SolTherm_\
+                );
+
+        //Source term U_R
+        IsenBNSourceTerm(tauU, tauP, pref, rhoref,\
+                X_state_L, STerm_R,\
+                sol.SolTherm_);
+
+        JacMatrix_R = IsenBNSourceTermGradient(tauU, tauP, pref, rhoref,\
+                X_state_R,\
+                sol.SolTherm_\
+                );
+
+        //Source term H
+        IsenBNSourceTerm(tauU, tauP, pref, rhoref,\
+                H_state_copy, STerm,\
+                sol.SolTherm_);
+
+        JacMatrix = IsenBNSourceTermGradient(tauU, tauP, pref, rhoref,\
+                H_state_copy,\
+                sol.SolTherm_\
+                );
+
+        if(TimeIntegrationType_=="Rosenbrock4"){
+        }
+        else if(TimeIntegrationType_=="ImplicitEuler1"){
+
+            BN_ImplicitEuler(\
+                    X_state_L,\
+                    STerm_L, JacMatrix_L, Id,\
+                    dtRelax\
+                    );
+
+            BN_ImplicitEuler(\
+                    X_state_R,\
+                    STerm_R, JacMatrix_R, Id,\
+                    dtRelax\
+                    );
+
+            BN_ImplicitEuler(\
+                    H_state_copy,\
+                    STerm, JacMatrix, Id,\
+                    dtRelax\
+                    );
+        }
+        else if(TimeIntegrationType_=="ExplicitRungeKutta4"){
+        }
+
+        W_state_L = ConsVarToNConsVarLoc(X_state_L, sol.SolTherm_);
+        W_state_R = ConsVarToNConsVarLoc(X_state_R, sol.SolTherm_);
+        Flux_L    = ConsVarFlux(W_state_L, sol.SolTherm_); 
+        Flux_R    = ConsVarFlux(W_state_R, sol.SolTherm_); 
 
             //Gathering of the solution
             H_state_avr = H_state_copy -\
@@ -485,8 +548,6 @@ void Solver_Isen::BN_BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshT
                 }
             }
         }
-
-    }
 
 }
 
@@ -818,6 +879,8 @@ void Solver_Isen::BoundaryLayerUpdateFracStep(Sol_Isen& sol, Mesh& mesh, string 
     Vector5d H_state_cell;
 
     double dtRelax_face_ini = ZERO;
+    Matrix5d Id;
+    Id = Eigen::Matrix<double, 5, 5>::Identity();
 
     //Function
 
@@ -832,10 +895,16 @@ void Solver_Isen::BoundaryLayerUpdateFracStep(Sol_Isen& sol, Mesh& mesh, string 
     //double etaU   = sol.etaRelax_(1);
     //double etaP   = sol.etaRelax_(2);
 
-    //Cubic relaxation 
+    //relaxation inputs
+    double tauP     = sol.tauRelax_(0);
+    double tauU     = sol.tauRelax_(1);
+    double pref     = sol.pRef_;
+    double rhoref   = sol.mRef_;
 
-    Vector5d STerm;
+    //Cubic relaxation 
+    Vector5d STerm, STerm_L, STerm_R;
     Vector5d JacVector;
+    Matrix5d JacMatrix, JacMatrix_L, JacMatrix_R;
 
     double NcellExt = mesh.Get_NcellExt();
 
@@ -890,26 +959,51 @@ void Solver_Isen::BoundaryLayerUpdateFracStep(Sol_Isen& sol, Mesh& mesh, string 
 
                 JacVector = NonLinearSpringGradient(TimeMat, H_state_cell, U_state_eq,\
                         RmatEigenVectorsInv);
-            }
-            if (TimeIntegrationType_=="Rosenbrock4"){
 
-                RosenBrockFourthOrder(\
-                        TimeMat,\
-                        RmatEigenVectors, RmatEigenVectorsInv,\
-                        H_state_cell, U_state_ref, U_state_eq,\
-                        STerm, JacVector, One,\
-                        dtRelax_face_ini\
+                if (TimeIntegrationType_=="Rosenbrock4"){
+
+                    RosenBrockFourthOrder(\
+                            TimeMat,\
+                            RmatEigenVectors, RmatEigenVectorsInv,\
+                            H_state_cell, U_state_ref, U_state_eq,\
+                            STerm, JacVector, One,\
+                            dtRelax_face_ini\
+                            );
+                }
+                else if (TimeIntegrationType_=="ImplicitEuler1"){
+
+                    ImplicitEuler(\
+                            TimeMat,\
+                            RmatEigenVectors, RmatEigenVectorsInv,\
+                            H_state_cell, U_state_ref, U_state_eq,\
+                            STerm, JacVector, One,\
+                            dtRelax_face_ini\
+                            );
+                }
+            }
+            else if(sol.SolType_=="BN Relaxation"){
+
+                IsenBNSourceTerm(tauU, tauP, pref, rhoref,\
+                        H_state_cell, STerm,\
+                        sol.SolTherm_);
+
+                JacMatrix = IsenBNSourceTermGradient(tauU, tauP, pref, rhoref,\
+                        H_state_cell,\
+                        sol.SolTherm_\
                         );
-            }
-            else if (TimeIntegrationType_=="ImplicitEuler1"){
 
-            ImplicitEuler(\
-                    TimeMat,\
-                    RmatEigenVectors, RmatEigenVectorsInv,\
-                    H_state_cell, U_state_ref, U_state_eq,\
-                    STerm, JacVector, One,\
-                    dtRelax_face_ini\
-                    );
+
+                if(TimeIntegrationType_=="Rosenbrock4"){
+                }
+
+                else if(TimeIntegrationType_=="ImplicitEuler1"){
+
+                    BN_ImplicitEuler(\
+                            H_state_cell,\
+                            STerm, JacMatrix, Id,\
+                            dtRelax_face_ini\
+                            );
+                }
             }
 
             //Update of the staggered solution
@@ -3064,6 +3158,31 @@ void ImplicitEuler(\
 
 }
 
+//Euler Implicit of order 1 method for Baer-Nunziato 
+void BN_ImplicitEuler(\
+        Vector5d& U_state_ini,\
+        Vector5d& STerm_ini, Matrix5d& JacMatrix_ini, Matrix5d& Id,\
+        double& dtRelax_ini\
+        ){
+
+    //local variables
+    Matrix5d A;
+    Vector5d g1;
+
+    //Computing [Id/(Gam*dtRelax) - Jac_ini]^-1
+    A = (ONE/(dtRelax_ini))*Id - JacMatrix_ini;
+
+    //Defining the solver based on a QR decomposition
+    Eigen::ColPivHouseholderQR<Matrix5d> QRsolver(A);
+    //Deriving g1 vector:
+    g1 = QRsolver.solve(STerm_ini);
+
+    U_state_ini  = U_state_ini + g1;
+
+    return;
+
+}
+
 //Rosenbrock of order 4 method
 void RosenBrockFourthOrder(\
         Matrix5d& TauMat,\
@@ -3326,6 +3445,9 @@ Vector5d ConsVarFluxUpdateLoc(\
         ConsFlux = ONE_OVER_TWO*JacConvFrozen*(U_state_L + U_state_R) -\
                    (ONE_OVER_TWO*EigenvaluesFrozen)*(U_state_R - U_state_L);
     }
+    else if(SchemeTypeCons=="HLLAC"){
+
+    }
     else{
 
         ConsFlux<<ZERO,
@@ -3434,6 +3556,55 @@ double SpectralRadiusRusanov(\
     double lambda = max(lambda_ckL, lambda_ckR);
 
     return lambda;
+
+}
+
+Vector4d WaveSpeedEstimate(Vector5d& W_state_L, Vector5d& W_state_R,\
+                ThermoLaw& Therm){
+
+    //Local variables
+    double p1_L   = W_state_L(1); 
+    double p1_R   = W_state_R(1); 
+    double rho1_L = Density_EOS(1, Therm, p1_L, ZERO); 
+    double rho1_R = Density_EOS(1, Therm, p1_R, ZERO); 
+    double c1_L   = Sound_Speed_EOS(1, Therm, rho1_L, p1_L); 
+    double c1_R   = Sound_Speed_EOS(1, Therm, rho1_R, p1_R); 
+    double u1_L   = W_state_L(2); 
+    double u1_R   = W_state_R(2); 
+
+    double p2_L   = W_state_L(3); 
+    double p2_R   = W_state_R(3); 
+    double rho2_L = Density_EOS(2, Therm, p2_L, ZERO); 
+    double rho2_R = Density_EOS(2, Therm, p2_R, ZERO); 
+    double c2_L   = Sound_Speed_EOS(2, Therm, rho2_L, p2_L); 
+    double c2_R   = Sound_Speed_EOS(2, Therm, rho2_R, p2_R); 
+    double u2_L   = W_state_L(4); 
+    double u2_R   = W_state_R(4);
+
+    //Function
+    double u1_avr = (rho1_R/(rho1_R + rho1_L))*u1_R + (rho1_L/(rho1_R + rho1_L))*u1_L;
+    double c1_avr = (rho1_R/(rho1_R + rho1_L))*c1_R + (rho1_L/(rho1_R + rho1_L))*c1_L;
+
+    double u2_avr = (rho2_R/(rho2_R + rho2_L))*u2_R + (rho2_L/(rho2_R + rho2_L))*u2_L;
+    double c2_avr = (rho2_R/(rho2_R + rho2_L))*c2_R + (rho2_L/(rho2_R + rho2_L))*c2_L;
+
+    double lambda1_L     = u1_L - c1_L; 
+    double lambda1_L_avr = u1_avr - c1_avr; 
+    double lambda1_R     = u1_R + c1_R; 
+    double lambda1_R_avr = u1_avr + c1_avr; 
+
+    double lambda2_L     = u2_L - c2_L; 
+    double lambda2_L_avr = u2_avr - c2_avr; 
+    double lambda2_R     = u2_R + c2_R; 
+    double lambda2_R_avr = u2_avr + c2_avr;
+
+    Vector4d WaveSpeeds;
+    WaveSpeeds(0) = min(lambda1_L, lambda1_L_avr);
+    WaveSpeeds(1) = max(lambda1_R, lambda1_R_avr);
+    WaveSpeeds(3) = min(lambda2_L, lambda2_L_avr);
+    WaveSpeeds(4) = max(lambda2_R, lambda2_R_avr);
+
+    return WaveSpeeds;
 
 }
 

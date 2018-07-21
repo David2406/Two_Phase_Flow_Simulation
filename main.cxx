@@ -39,31 +39,38 @@ int main(int argc, char* argv[])
 
     ofstream file(FileName.c_str(), ios::out);  //file flux declaration and file opening
 
-    file<<"Alpha1"<<" "<<"Cwood_sat"<<" "<<"Cstar_sat"<<" "<<"Cwood"<<" "<<"Cstar"<<endl;
+    file<<"Alpha1"<<" "<<"Cwood_sat"<<" "<<"Cstar_sat"<<" "<<"Cwood"<<" "<<"Cstar"<<" "\
+        <<"Cfroz"<<endl;
     double Cwood_sat  = ZERO;
     double Cstar_sat  = ZERO;
+    double Cfroz      = ZERO;
     double Cwood      = ZERO;
     double Cstar      = ZERO;
     double m          = ZERO;
+    double m1         = ZERO;
     double alpha2     = ZERO;
 
-    for (double alpha1=ZERO; alpha1<=ONE; alpha1+=0.001){
+    for (double alpha1=ZERO; alpha1<=1.001; alpha1+=0.001){
 
         alpha2 = ONE - alpha1;
         m = alpha1*rhovapsat + alpha2*rholiqsat;
+        m1 = alpha1*rhovapsat/m;
 
         Cwood_sat = sqrt((ONE/m)*(Cvapsat*Cliqsat/(alpha1*Cliqsat+alpha2*Cvapsat)));
         Cstar_sat = sqrt(alpha2*(Cvapsat/rhovapsat) + alpha1*(Cliqsat/rholiqsat));
 
         Cwood = sqrt((ONE/m)*(Cvap*Cliq/(alpha1*Cliq+alpha2*Cvap)));
         Cstar = sqrt(alpha2*(Cvap/rhovapsat) + alpha1*(Cliq/rholiqsat));
+        Cfroz = sqrt((alpha1/m)*Cvap + (alpha2/m)*Cliq);
 
-        file<<alpha1<<" "<<Cwood_sat<<" "<<Cstar_sat<<" "<<Cwood<<" "<<Cstar<<endl;
+        file<<alpha1<<" "<<Cwood_sat<<" "<<Cstar_sat<<" "<<Cwood<<" "<<Cstar<<" "\
+            <<Cfroz<<endl;
 
     }
 
     exit(EXIT_FAILURE);
     */
+    
 
     /* FILE READING PARAMETERS */
     string file_name="BN_Simulation.input";

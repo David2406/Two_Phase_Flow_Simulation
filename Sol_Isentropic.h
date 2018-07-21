@@ -53,6 +53,7 @@ class Sol_Isen
     //built with (InitR_ + InitL_)/2
     Matrix5d JacConvFrozen_;
     Vector5d DiracMassFrozen_;
+    double uI_Frozen_;
     double   EigenvaluesFrozen_;
     Matrix5d TimeMat_;
     Vector5d W_eq_;
@@ -476,6 +477,17 @@ Vector5d IsentropicBN_EigenvectorsBaseProjectionCons(\
 
 //The Heaviside funtion
 double Heaviside(double x, double time, double lambda);
+
+//Problem linear-conv linear-relax dirac
+double AkRelaxDirac(double x, double t,\
+        double uI_Frozen, double lambda_k,\
+        double ak, double ak_eq,\
+        double dirac_weight, double tauvec);
+
+//Problem linear-conv linear-relax dirac
+double AkRelaxDiracTest(double x, double t,\
+        double uI_Frozen, double lambda_k,\
+        double dirac_weight, double tauvec);
 
 //Returns the relaxation time matrix weighted by reference state (Cubic relaxation)
 Matrix5d TimeRelaxMat(Vector5d& U_state_ref, Vector5d& TimeWeight);
