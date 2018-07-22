@@ -260,6 +260,7 @@ void BoundaryLayerResolutionLocalConsVar(\
 
 //Returns the non-conservative flux à la Ambroso Galié Chalons
 Vector5d NConsFluxLoc(Vector5d& W_state_L, Vector5d& W_state_R,\
+        Vector4d& WaveSpeeds, Vector5d& Star_UP, string SchemeTypeNCons,\
         ThermoLaw& Therm\
         );
 
@@ -369,7 +370,9 @@ void NonLinearSpringExactSolution(Vector5d& U_state_exact, Vector5d& U_state_ini
 /************************************************/
 
 //Returns the conservative flux according to the scheme choice SchemeTypeCons_
-Vector5d ConsVarFluxUpdateLoc(\
+void ConsVarFluxUpdateLoc(\
+        Vector5d& ConsFlux,\
+        Vector5d& NConsVarFluxR, Vector5d& NConsVarFluxL,\
         Vector5d& W_state_L, Vector5d&  W_state_R,\
         ThermoLaw& Therm,\
         Matrix5d& JacConvFrozen,\
@@ -390,6 +393,33 @@ double SpectralRadiusRusanov(\
 //Return the eigenvalues wave speed for the HLLC scheme
 Vector4d WaveSpeedEstimate(Vector5d& W_state_L, Vector5d& W_state_R,\
                 ThermoLaw& Therm);
+
+//Return [u1_star, p1_star, u2_star, p2_star_L, p2_star_R]
+//solutions of the coupling wave with simplified Riemann invariants
+Vector5d U_P_star_states(Vector5d& W_state_L, Vector5d& W_state_R,\
+                         Vector4d& WaveSpeeds,\
+                         ThermoLaw& Therm);
+
+//Returns the conservative flux related to HLLAC scheme
+Vector5d HLLAC_Flux(Vector5d& W_state_L, Vector5d& W_state_R,\
+                    Vector4d& WaveSpeeds, Vector5d& Star_UP,\
+                         ThermoLaw& Therm);
+
+//Fills the vector NConsVarFluxR with the non-conservative F^+ contribution
+Vector5d NConsVarFluxUpdateLocR(\
+        Vector5d& W_state_L, Vector5d& W_state_R,\
+        Vector4d& WaveSpeeds, Vector5d& Star_UP,\
+        ThermoLaw& Therm\
+        );
+
+//Fills the vector NConsVarFluxL with the non-conservative F^- contribution
+Vector5d NConsVarFluxUpdateLocL(\
+        Vector5d& W_state_L, Vector5d& W_state_R,\
+        Vector4d& WaveSpeeds, Vector5d& Star_UP,\
+        ThermoLaw& Therm\
+        );
+
+/************************************************/
 
 //Returns the local timestep based on the Jacobian eigenvalues
 double LocalCourant_Conv(Vector5d& W_state_L, Vector5d& W_state_R,\

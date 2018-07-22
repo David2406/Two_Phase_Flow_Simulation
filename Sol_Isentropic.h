@@ -161,6 +161,20 @@ class Sol_Isen
 	                        // column 4:  0                    values
 	                        // column 5: +p_I*div(alpha1)      values
 
+    MatrixXd NConsVarFluxR_;//Dynamic matrix of 'Nfaces' rows and 5 columns:
+	                        // column 0:  u_I*div(alpha1)      values
+	                        // column 1:  0                    values
+	                        // column 2: -p_I*div(alpha1)      values
+	                        // column 4:  0                    values
+	                        // column 5: +p_I*div(alpha1)      values
+
+    MatrixXd NConsVarFluxL_;//Dynamic matrix of 'Nfaces' rows and 5 columns:
+	                        // column 0:  u_I*div(alpha1)      values
+	                        // column 1:  0                    values
+	                        // column 2: -p_I*div(alpha1)      values
+	                        // column 4:  0                    values
+	                        // column 5: +p_I*div(alpha1)      values
+
     MatrixXd NConsVarFace_;//Dynamic matrix of 'Nfaces' rows and 1 column:
                                 // column 0: alpha1 face values
                                 // used for the non-conservative terms discretization

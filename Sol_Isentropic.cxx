@@ -80,7 +80,9 @@ Sol_Isen::Sol_Isen(Mesh& M,\
     ConsVarFlux_ = MatrixXd::Zero(Nfaces,5);
 
     //Initializing the non-conservative terms
-    NConsVarFlux_ = MatrixXd::Zero(NcellExt,5);
+    NConsVarFlux_  = MatrixXd::Zero(NcellExt,5);
+    NConsVarFluxR_ = MatrixXd::Zero(NcellExt,5);
+    NConsVarFluxL_ = MatrixXd::Zero(NcellExt,5);
 
     //Initializing the face values used for the non-conservative terms
     NConsVarFace_ = MatrixXd::Zero(Nfaces,1);
@@ -220,6 +222,8 @@ Sol_Isen::Sol_Isen( Sol_Isen& solution){
     Mach_               = solution.Mach_;
     ConsVarFlux_        = solution.ConsVarFlux_;
     NConsVarFlux_       = solution.NConsVarFlux_;
+    NConsVarFluxL_      = solution.NConsVarFluxL_;
+    NConsVarFluxR_      = solution.NConsVarFluxR_;
     SourceTerms_        = solution.SourceTerms_;
     SourceTermsEqRelax_ = solution.SourceTermsEqRelax_;
     SolExact_           = solution.SolExact_;

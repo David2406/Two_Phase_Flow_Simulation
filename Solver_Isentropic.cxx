@@ -408,6 +408,10 @@ void Solver_Isen::BN_BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshT
     double pref     = sol.pRef_;
     double rhoref   = sol.mRef_;
 
+    //Non-conservative products discretization
+    Vector4d WaveSpeeds;
+    Vector5d Star_UP; 
+
     //Cubic relaxation 
     Vector5d STerm, STerm_L, STerm_R;
     Matrix5d JacMatrix, JacMatrix_L, JacMatrix_R;
@@ -448,72 +452,88 @@ void Solver_Isen::BN_BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshT
 
             W_state_L = ConsVarToNConsVarLoc(X_state_L, sol.SolTherm_);
             W_state_R = ConsVarToNConsVarLoc(X_state_R, sol.SolTherm_);
-            NConsFlux = NConsFluxLoc(W_state_L, W_state_R, sol.SolTherm_);
+
+            WaveSpeeds =  WaveSpeedEstimate(W_state_L, W_state_R, sol.SolTherm_);
+            Star_UP =  U_P_star_states(W_state_L, W_state_R, WaveSpeeds, sol.SolTherm_);
+
+            NConsFlux = NConsFluxLoc(W_state_L, W_state_R,\
+                    WaveSpeeds, Star_UP, SchemeTypeNCons_, sol.SolTherm_);
         }
 
         H_state_avr = NConsVarAveraged(X_state_L, X_state_R, weight_L);
 
         H_state_copy = H_state_avr;
 
-        //Source term U_L
-        IsenBNSourceTerm(tauU, tauP, pref, rhoref,\
-                X_state_L, STerm_L,\
-                sol.SolTherm_);
+        //No-source terms active
+        if(SourceTermType_=="none"){
 
-        JacMatrix_L = IsenBNSourceTermGradient(tauU, tauP, pref, rhoref,\
-                X_state_L,\
-                sol.SolTherm_\
-                );
+            Flux_L    = ConsVarFlux(W_state_L, sol.SolTherm_); 
+            Flux_R    = ConsVarFlux(W_state_R, sol.SolTherm_); 
 
-        //Source term U_R
-        IsenBNSourceTerm(tauU, tauP, pref, rhoref,\
-                X_state_L, STerm_R,\
-                sol.SolTherm_);
-
-        JacMatrix_R = IsenBNSourceTermGradient(tauU, tauP, pref, rhoref,\
-                X_state_R,\
-                sol.SolTherm_\
-                );
-
-        //Source term H
-        IsenBNSourceTerm(tauU, tauP, pref, rhoref,\
-                H_state_copy, STerm,\
-                sol.SolTherm_);
-
-        JacMatrix = IsenBNSourceTermGradient(tauU, tauP, pref, rhoref,\
-                H_state_copy,\
-                sol.SolTherm_\
-                );
-
-        if(TimeIntegrationType_=="Rosenbrock4"){
         }
-        else if(TimeIntegrationType_=="ImplicitEuler1"){
+        else{
 
-            BN_ImplicitEuler(\
+            //Source term U_L
+            IsenBNSourceTerm(tauU, tauP, pref, rhoref,\
+                    X_state_L, STerm_L,\
+                    sol.SolTherm_);
+
+            JacMatrix_L = IsenBNSourceTermGradient(tauU, tauP, pref, rhoref,\
                     X_state_L,\
-                    STerm_L, JacMatrix_L, Id,\
-                    dtRelax\
+                    sol.SolTherm_\
                     );
 
-            BN_ImplicitEuler(\
+            //Source term U_R
+            IsenBNSourceTerm(tauU, tauP, pref, rhoref,\
+                    X_state_L, STerm_R,\
+                    sol.SolTherm_);
+
+            JacMatrix_R = IsenBNSourceTermGradient(tauU, tauP, pref, rhoref,\
                     X_state_R,\
-                    STerm_R, JacMatrix_R, Id,\
-                    dtRelax\
+                    sol.SolTherm_\
                     );
 
-            BN_ImplicitEuler(\
+            //Source term H
+            IsenBNSourceTerm(tauU, tauP, pref, rhoref,\
+                    H_state_copy, STerm,\
+                    sol.SolTherm_);
+
+            JacMatrix = IsenBNSourceTermGradient(tauU, tauP, pref, rhoref,\
                     H_state_copy,\
-                    STerm, JacMatrix, Id,\
-                    dtRelax\
+                    sol.SolTherm_\
                     );
-        }
-        else if(TimeIntegrationType_=="ExplicitRungeKutta4"){
-        }
 
-        W_state_L = ConsVarToNConsVarLoc(X_state_L, sol.SolTherm_);
-        W_state_R = ConsVarToNConsVarLoc(X_state_R, sol.SolTherm_);
-        Flux_L    = ConsVarFlux(W_state_L, sol.SolTherm_); 
-        Flux_R    = ConsVarFlux(W_state_R, sol.SolTherm_); 
+            if(TimeIntegrationType_=="Rosenbrock4"){
+            }
+            else if(TimeIntegrationType_=="ImplicitEuler1"){
+
+                BN_ImplicitEuler(\
+                        X_state_L,\
+                        STerm_L, JacMatrix_L, Id,\
+                        dtRelax\
+                        );
+
+                BN_ImplicitEuler(\
+                        X_state_R,\
+                        STerm_R, JacMatrix_R, Id,\
+                        dtRelax\
+                        );
+
+                BN_ImplicitEuler(\
+                        H_state_copy,\
+                        STerm, JacMatrix, Id,\
+                        dtRelax\
+                        );
+            }
+            else if(TimeIntegrationType_=="ExplicitRungeKutta4"){
+            }
+
+            W_state_L = ConsVarToNConsVarLoc(X_state_L, sol.SolTherm_);
+            W_state_R = ConsVarToNConsVarLoc(X_state_R, sol.SolTherm_);
+            Flux_L    = ConsVarFlux(W_state_L, sol.SolTherm_); 
+            Flux_R    = ConsVarFlux(W_state_R, sol.SolTherm_); 
+
+        }
 
             //Gathering of the solution
             H_state_avr = H_state_copy -\
@@ -552,72 +572,91 @@ void Solver_Isen::BN_BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshT
 }
 
 Vector5d NConsFluxLoc(Vector5d& W_state_L, Vector5d& W_state_R,\
+        Vector4d& WaveSpeeds, Vector5d& Star_UP, string SchemeTypeNCons,\
         ThermoLaw& Therm){
 
     Vector5d NConsFlux;
-
-    //Local variables
     double alpha1_L = W_state_L(0);
-    //double alpha2_L = ONE - alpha1_L;
-    //double u1_L     = W_state_L(2);
-    double u2_L     = W_state_L(4);
-    double p1_L     = W_state_L(1);
-    //double p2_L     = W_state_L(3);
-
+    double alpha2_L = ONE - alpha1_L;
     double alpha1_R = W_state_R(0);
-    //double alpha2_R = ONE - alpha1_R;
-    //double u1_R     = W_state_R(2);
-    double u2_R     = W_state_R(4);
-    double p1_R     = W_state_R(1);
-    //double p2_R     = W_state_R(3);
+    double alpha2_R = ONE - alpha1_R;
 
-    double uI = ONE_OVER_TWO*(u2_L + u2_R); 
-    double pI = ONE_OVER_TWO*(p1_L + p1_R); 
+    if(SchemeTypeNCons=="Default"){
 
-//    NConsFlux<<-uI*(alpha1_R - alpha1_L),
-//               ZERO,
-//               -(alpha2_R*p2_R - alpha2_L*p2_L),
-//               ZERO,
-//                (alpha2_R*p2_R - alpha2_L*p2_L);
-    
-    NConsFlux<<-uI*(alpha1_R - alpha1_L),
-               ZERO,
-               +pI*(alpha1_R - alpha1_L),
-               ZERO,
-               -pI*(alpha1_R - alpha1_L);
+        //Local variables
+        //double u1_L     = W_state_L(2);
+        double u2_L     = W_state_L(4);
+        double p1_L     = W_state_L(1);
+        //double p2_L     = W_state_L(3);
 
-/* Test Non-conservative product of Ambroso, Chalons, Galié */
-/*
-    //Construction de la constante de relaxation
-    double rho1_L = Density_EOS(1, Therm, p1_L, ZERO); 
-    double rho1_R = Density_EOS(1, Therm, p1_R, ZERO); 
-    double c1_L   = Sound_Speed_EOS(1, Therm, rho1_L, p1_L);
-    double c1_R   = Sound_Speed_EOS(1, Therm, rho1_R, p1_R);
-    double a1 = 1.1*max(rho1_L*c1_L, rho1_R*c1_R);
+        //double u1_R     = W_state_R(2);
+        double u2_R     = W_state_R(4);
+        double p1_R     = W_state_R(1);
+        //double p2_R     = W_state_R(3);
 
-    //Construction des quantités de la discontinuité de contact
-    //On suppose U_L donné on construit U+
-    double m = alpha1_L*rho1_L*(u1_L - u2_L);
-    double cofac = (m/(alpha1_R*a1) - ONE)/(m/(alpha1_L*a1) - ONE);
+        double uI = ONE_OVER_TWO*(u2_L + u2_R); 
+        double pI = ONE_OVER_TWO*(p1_L + p1_R); 
 
-    if (cofac < ZERO){
+        //    NConsFlux<<-uI*(alpha1_R - alpha1_L),
+        //               ZERO,
+        //               -(alpha2_R*p2_R - alpha2_L*p2_L),
+        //               ZERO,
+        //                (alpha2_R*p2_R - alpha2_L*p2_L);
+
+        NConsFlux<<-uI*(alpha1_R - alpha1_L),
+            ZERO,
+            +pI*(alpha1_R - alpha1_L),
+            ZERO,
+            -pI*(alpha1_R - alpha1_L);
+
+        /* Test Non-conservative product of Ambroso, Chalons, Galié */
+        /*
+        //Construction de la constante de relaxation
+        double rho1_L = Density_EOS(1, Therm, p1_L, ZERO); 
+        double rho1_R = Density_EOS(1, Therm, p1_R, ZERO); 
+        double c1_L   = Sound_Speed_EOS(1, Therm, rho1_L, p1_L);
+        double c1_R   = Sound_Speed_EOS(1, Therm, rho1_R, p1_R);
+        double a1 = 1.1*max(rho1_L*c1_L, rho1_R*c1_R);
+
+        //Construction des quantités de la discontinuité de contact
+        //On suppose U_L donné on construit U+
+        double m = alpha1_L*rho1_L*(u1_L - u2_L);
+        double cofac = (m/(alpha1_R*a1) - ONE)/(m/(alpha1_L*a1) - ONE);
+
+        if (cofac < ZERO){
 
         cout<<"Inside NConsFlux BS: cofac < 0, rho1_p can not be computed"<<endl;
         exit(EXIT_FAILURE);
+        }
+
+        double rho1_p = sqrt(cofac)*rho1_L;
+        double u1_p   = m/(alpha1_R*rho1_p) + u2_L;
+
+        double a2p2_jump = m*(u1_L - u1_p) - p1_L*(alpha1_R - alpha1_L)\
+        -alpha1_R*a1*a1*(ONE/rho1_L - ONE/rho1_p);
+
+        NConsFlux<<-uI*(alpha1_R - alpha1_L),
+        ZERO,
+        -a2p2_jump,
+        ZERO,
+        +a2p2_jump;
+
+         */
+    }
+    //HLLAC non-conservative products discretization
+    else{
+
+        double u2_star   = Star_UP(2);
+        double p2_star_L = Star_UP(3);
+        double p2_star_R = Star_UP(4);
+
+        NConsFlux<<-u2_star*(alpha1_R - alpha1_L),
+            ZERO,
+            -(alpha2_R*p2_star_R - alpha2_L*p2_star_L),
+            ZERO,
+            +(alpha2_R*p2_star_R - alpha2_L*p2_star_L);
     }
 
-    double rho1_p = sqrt(cofac)*rho1_L;
-    double u1_p   = m/(alpha1_R*rho1_p) + u2_L;
-
-    double a2p2_jump = m*(u1_L - u1_p) - p1_L*(alpha1_R - alpha1_L)\
-                       -alpha1_R*a1*a1*(ONE/rho1_L - ONE/rho1_p);
-
-    NConsFlux<<-uI*(alpha1_R - alpha1_L),
-               ZERO,
-               -a2p2_jump,
-               ZERO,
-               +a2p2_jump;
-*/
     return NConsFlux;
 }
 
@@ -1072,6 +1111,9 @@ void Solver_Isen::ConsVarFluxUpdate(Sol_Isen& sol, Mesh& mesh){
     //Local variables
     int L,R;
     Vector5d W_state_L, W_state_R, W_state_avr;
+    Vector5d ConsFlux     = VectorXd::Zero(5);
+    Vector5d NConsVarFluxR = VectorXd::Zero(5);
+    Vector5d NConsVarFluxL = VectorXd::Zero(5);
     double alpha1_L, alpha1_R;
 
     //Function
@@ -1094,15 +1136,25 @@ void Solver_Isen::ConsVarFluxUpdate(Sol_Isen& sol, Mesh& mesh){
             sol.NConsVarFace_(face_id) = ONE_OVER_TWO*(alpha1_L + alpha1_R);
 
             //Building the conservative flux
-            sol.ConsVarFlux_.row(face_id) = ConsVarFluxUpdateLoc(\
+            ConsFlux      = VectorXd::Zero(5);
+            NConsVarFluxR = VectorXd::Zero(5);
+            NConsVarFluxL = VectorXd::Zero(5);
+
+            ConsVarFluxUpdateLoc(\
+                    ConsFlux,\
+                    NConsVarFluxR, NConsVarFluxL,\
                     W_state_L, W_state_R,\
                     sol.SolTherm_,\
                     sol.JacConvFrozen_,\
                     sol.EigenvaluesFrozen_,\
                     SchemeTypeCons_\
-                    ).transpose();
-        }
+                    );
 
+            sol.ConsVarFlux_.row(face_id)   = ConsFlux.transpose();
+            sol.NConsVarFluxR_.row(face_id) = NConsVarFluxR.transpose();
+            sol.NConsVarFluxL_.row(face_id) = NConsVarFluxL.transpose();
+
+        }
 }
 
 void Solver_Isen::NConsVarFluxUpdate(Sol_Isen& sol, Mesh& mesh){
@@ -1179,10 +1231,20 @@ void Solver_Isen::ConsVarUpdate(Sol_Isen& sol, Mesh& mesh){
         Lf = mesh.CellIndex_(cell_id,1);
         Rf = mesh.CellIndex_(cell_id,2);
 
-        sol.ConsVar_.row(cell_id) +=-(TimeStep_/SpaceStep)*(
-            sol.ConsVarFlux_.row(Rf) - sol.ConsVarFlux_.row(Lf) +\
-            sol.NConsVarFlux_.row(cell_id) ) +\
-            TimeStep_*(sol.SourceTerms_.row(cell_id));
+        if(SchemeTypeCons_=="Rusanov"){
+
+            sol.ConsVar_.row(cell_id) +=-(TimeStep_/SpaceStep)*(
+                    sol.ConsVarFlux_.row(Rf) - sol.ConsVarFlux_.row(Lf) +\
+                    sol.NConsVarFlux_.row(cell_id) ) +\
+                TimeStep_*(sol.SourceTerms_.row(cell_id));
+        }
+        else if(SchemeTypeCons_=="HLLAC"){
+
+            sol.ConsVar_.row(cell_id) +=-(TimeStep_/SpaceStep)*(
+                    sol.ConsVarFlux_.row(Rf) - sol.ConsVarFlux_.row(Lf) +\
+                    sol.NConsVarFluxL_.row(Rf) + sol.NConsVarFluxR_.row(Lf) ) +\
+                TimeStep_*(sol.SourceTerms_.row(cell_id));
+        }
     }
 
     //Treatment of the boundary conditions
@@ -3413,7 +3475,9 @@ Matrix5d IsenBNSourceTermGradient(double tauU, double tauP, double pref, double 
 /*****************  CONVECTION  *****************/
 /************************************************/
 
-Vector5d ConsVarFluxUpdateLoc(\
+void ConsVarFluxUpdateLoc(\
+        Vector5d& ConsFlux,\
+        Vector5d& NConsVarFluxR, Vector5d& NConsVarFluxL,\
         Vector5d& W_state_L, Vector5d&  W_state_R,\
         ThermoLaw& Therm,\
         Matrix5d& JacConvFrozen,\
@@ -3422,7 +3486,7 @@ Vector5d ConsVarFluxUpdateLoc(\
         ){
 
     //Local Variables
-    Vector5d ConsFlux, Flux_L, Flux_R;
+    Vector5d Flux_L, Flux_R;
     Vector5d U_state_L = NConsVarToConsVarLoc(W_state_L, Therm);
     Vector5d U_state_R = NConsVarToConsVarLoc(W_state_R, Therm);
     
@@ -3447,6 +3511,12 @@ Vector5d ConsVarFluxUpdateLoc(\
     }
     else if(SchemeTypeCons=="HLLAC"){
 
+        Vector4d WaveSpeeds =  WaveSpeedEstimate(W_state_L, W_state_R, Therm);
+        Vector5d Star_UP =  U_P_star_states(W_state_L, W_state_R, WaveSpeeds, Therm);
+        ConsFlux = HLLAC_Flux(W_state_L, W_state_R, WaveSpeeds, Star_UP, Therm);
+        NConsVarFluxR = NConsVarFluxUpdateLocR(W_state_L, W_state_R, WaveSpeeds, Star_UP, Therm);
+        NConsVarFluxL = NConsVarFluxUpdateLocL(W_state_L, W_state_R, WaveSpeeds, Star_UP, Therm);
+
     }
     else{
 
@@ -3457,8 +3527,6 @@ Vector5d ConsVarFluxUpdateLoc(\
             ZERO;
 
     }
-
-    return ConsFlux;
 
 }
 
@@ -3601,10 +3669,234 @@ Vector4d WaveSpeedEstimate(Vector5d& W_state_L, Vector5d& W_state_R,\
     Vector4d WaveSpeeds;
     WaveSpeeds(0) = min(lambda1_L, lambda1_L_avr);
     WaveSpeeds(1) = max(lambda1_R, lambda1_R_avr);
-    WaveSpeeds(3) = min(lambda2_L, lambda2_L_avr);
-    WaveSpeeds(4) = max(lambda2_R, lambda2_R_avr);
+    WaveSpeeds(2) = min(lambda2_L, lambda2_L_avr);
+    WaveSpeeds(3) = max(lambda2_R, lambda2_R_avr);
 
     return WaveSpeeds;
+
+}
+
+Vector5d U_P_star_states(Vector5d& W_state_L, Vector5d& W_state_R,\
+                         Vector4d& WaveSpeeds,\
+                         ThermoLaw& Therm){
+
+    //Local variables
+    double alpha1_L  = W_state_L(0);
+    double alpha1_R  = W_state_R(0);
+    double p1_L      = W_state_L(1); 
+    double p1_R      = W_state_R(1); 
+    double rho1_L    = Density_EOS(1, Therm, p1_L, ZERO); 
+    double rho1_R    = Density_EOS(1, Therm, p1_R, ZERO); 
+    double u1_L      = W_state_L(2); 
+    double u1_R      = W_state_R(2); 
+
+    double alpha2_L  = ONE - alpha1_L;
+    double alpha2_R  = ONE - alpha1_R;
+    double p2_L      = W_state_L(3); 
+    double p2_R      = W_state_R(3); 
+    double rho2_L    = Density_EOS(2, Therm, p2_L, ZERO); 
+    double rho2_R    = Density_EOS(2, Therm, p2_R, ZERO); 
+    double u2_L      = W_state_L(4); 
+    double u2_R      = W_state_R(4);
+
+    double S1_L = WaveSpeeds(0);
+    double S1_R = WaveSpeeds(1);
+    double S2_L = WaveSpeeds(2);
+    double S2_R = WaveSpeeds(3);
+
+    //Function
+    double mq1_R =  rho1_R*(S1_R - u1_R);
+    double mq1_L = -rho1_L*(S1_L - u1_L);
+    double mq1   = mq1_R + mq1_L;
+
+    double u1_star = (mq1_R*u1_R + mq1_L*u1_L - (p1_R - p1_L) )/mq1;
+    double p1_star = p1_R + mq1_R*(u1_star - u1_R);
+
+    double mq2_R =  alpha2_R*rho2_R*(S2_R - u2_R);
+    double mq2_L = -alpha2_L*rho2_L*(S2_L - u2_L);
+    double mq2   = mq2_R + mq2_L;
+    double u2_star = (mq2_R*u2_R + mq2_L*u2_L - (alpha2_R*p2_R -alpha2_L*p2_L) \
+                                              - (alpha1_R - alpha1_L)*p1_star)/mq2;
+
+    double p2_star_L = p2_L - (mq2_L/alpha2_L)*(u2_star - u2_L);
+    double p2_star_R = p2_R + (mq2_R/alpha2_R)*(u2_star - u2_R);
+
+    Vector5d Star_State;
+    Star_State(0) = u1_star;
+    Star_State(1) = p1_star;
+    Star_State(2) = u2_star;
+    Star_State(3) = p2_star_L;
+    Star_State(4) = p2_star_R;
+
+    return Star_State;
+}
+
+Vector5d HLLAC_Flux(Vector5d& W_state_L, Vector5d& W_state_R,\
+                    Vector4d& WaveSpeeds, Vector5d& Star_UP,\
+                         ThermoLaw& Therm){
+
+    //Local variables
+    double alpha1_L  = W_state_L(0);
+    double alpha1_R  = W_state_R(0);
+    double p1_L      = W_state_L(1); 
+    double p1_R      = W_state_R(1); 
+    double rho1_L    = Density_EOS(1, Therm, p1_L, ZERO); 
+    double rho1_R    = Density_EOS(1, Therm, p1_R, ZERO); 
+    double m1_L      = alpha1_L*rho1_L;
+    double m1_R      = alpha1_R*rho1_R;
+    double u1_L      = W_state_L(2); 
+    double u1_R      = W_state_R(2); 
+
+    double alpha2_L  = ONE - alpha1_L;
+    double alpha2_R  = ONE - alpha1_R;
+    double p2_L      = W_state_L(3); 
+    double p2_R      = W_state_R(3); 
+    double rho2_L    = Density_EOS(2, Therm, p2_L, ZERO); 
+    double rho2_R    = Density_EOS(2, Therm, p2_R, ZERO); 
+    double m2_L      = alpha2_L*rho2_L;
+    double m2_R      = alpha2_R*rho2_R;
+    double u2_L      = W_state_L(4); 
+    double u2_R      = W_state_R(4);
+
+    double S1_L = WaveSpeeds(0);
+    double S1_R = WaveSpeeds(1);
+    double S2_L = WaveSpeeds(2);
+    double S2_R = WaveSpeeds(3);
+
+    double u1_star = Star_UP(0);
+    double u2_star = Star_UP(2);
+
+    double mk   = ZERO;
+    double mkuk = ZERO;
+
+    //Function
+    Vector5d Flux   = VectorXd::Zero(5);
+    Vector5d Flux_L = ConsVarFlux(W_state_L, Therm); 
+    Vector5d Flux_R = ConsVarFlux(W_state_R, Therm); 
+
+    //Subsonic flow test
+    if( u2_star >= S1_R || u2_star <= S1_L){
+
+        cout<<"Inside HLLAC Flux: Supersonic configuration!"<<endl;
+        exit(EXIT_FAILURE);
+    }
+
+    //Phase1
+    if (S1_L > ZERO){
+
+        Flux(1) = Flux_L(1);
+        Flux(2) = Flux_L(2);
+    }
+    else if (ZERO < u2_star){
+
+        mk = m1_L*(u1_L - S1_L)/(u1_star - S1_L);
+        mkuk = mk*u1_star;
+        Flux(1) = Flux_L(1) + S1_L*(mk - m1_L);
+        Flux(2) = Flux_L(2) + S1_L*(mkuk - m1_L*u1_L);
+    }
+    else if (ZERO < S1_R){
+
+        mk = m1_R*(u1_R - S1_R)/(u1_star - S1_R);
+        mkuk = mk*u1_star;
+        Flux(1) = Flux_R(1) + S1_R*(mk - m1_R);
+        Flux(2) = Flux_R(2) + S1_R*(mkuk - m1_R*u1_R);
+    }
+    else{
+
+        Flux(1) = Flux_R(1);
+        Flux(2) = Flux_R(2);
+    }
+    //Phase2
+    if (S2_L > ZERO){
+
+        Flux(3) = Flux_L(3);
+        Flux(4) = Flux_L(4);
+    }
+    else if (ZERO < u2_star){
+
+        mk = m2_L*(u2_L - S2_L)/(u2_star - S2_L);
+        mkuk = mk*u2_star;
+        Flux(3) = Flux_L(3) + S2_L*(mk - m2_L);
+        Flux(4) = Flux_L(4) + S2_L*(mkuk - m2_L*u2_L);
+    }
+    else if (ZERO < S2_R){
+
+        mk = m2_R*(u2_R - S2_R)/(u2_star - S2_R);
+        mkuk = mk*u2_star;
+        Flux(3) = Flux_R(3) + S2_R*(mk - m2_R);
+        Flux(4) = Flux_R(4) + S2_R*(mkuk - m2_R*u2_R);
+    }
+    else{
+
+        Flux(3) = Flux_R(3);
+        Flux(4) = Flux_R(4);
+    }
+
+    return Flux;
+
+}
+
+Vector5d NConsVarFluxUpdateLocR(\
+        Vector5d& W_state_L, Vector5d& W_state_R,\
+        Vector4d& WaveSpeeds, Vector5d& Star_UP,\
+        ThermoLaw& Therm\
+        ){
+
+    //Local variables
+    double alpha1_L  = W_state_L(0);
+    double alpha1_R  = W_state_R(0);
+
+    double alpha2_L  = ONE - alpha1_L;
+    double alpha2_R  = ONE - alpha1_R;
+
+    double u2_star   = Star_UP(2);
+    double p2_star_L = Star_UP(3);
+    double p2_star_R = Star_UP(4);
+
+    //Function
+    Vector5d NConsVarFluxR = VectorXd::Zero(5);
+
+    if( u2_star > ZERO){
+
+        NConsVarFluxR(0) = u2_star*(alpha1_R - alpha1_L);
+        NConsVarFluxR(2) = (alpha2_R*p2_star_R - alpha2_L*p2_star_L);
+        NConsVarFluxR(4) = -(alpha2_R*p2_star_R - alpha2_L*p2_star_L);
+
+    }
+
+    return NConsVarFluxR;
+
+}
+
+Vector5d NConsVarFluxUpdateLocL(\
+        Vector5d& W_state_L, Vector5d& W_state_R,\
+        Vector4d& WaveSpeeds, Vector5d& Star_UP,\
+        ThermoLaw& Therm\
+        ){
+
+    //Local variables
+    double alpha1_L  = W_state_L(0);
+    double alpha1_R  = W_state_R(0);
+
+    double alpha2_L  = ONE - alpha1_L;
+    double alpha2_R  = ONE - alpha1_R;
+
+    double u2_star   = Star_UP(2);
+    double p2_star_L = Star_UP(3);
+    double p2_star_R = Star_UP(4);
+
+    //Function
+    Vector5d NConsVarFluxL = VectorXd::Zero(5);
+
+    if( u2_star <= ZERO){
+
+        NConsVarFluxL(0) = u2_star*(alpha1_R - alpha1_L);
+        NConsVarFluxL(2) = (alpha2_R*p2_star_R - alpha2_L*p2_star_L);
+        NConsVarFluxL(4) = -(alpha2_R*p2_star_R - alpha2_L*p2_star_L);
+
+    }
+
+    return NConsVarFluxL;
 
 }
 
