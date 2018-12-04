@@ -30,7 +30,7 @@ complex<double> I(ZERO, ONE);
 //Numerical Parameters
 double eps_check_cst = 0.00000010000;
 double epsZero   = 1.e-10;
-double epsDicho  = 1.e-10;
+double epsDicho  = 1.e-8;
 double Big       = 1.e10;
 double Inf       = 1./0.;
 

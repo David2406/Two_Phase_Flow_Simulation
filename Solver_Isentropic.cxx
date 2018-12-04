@@ -380,6 +380,7 @@ void Solver_Isen::BN_BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshT
 
     //Local variables
     int L,R;
+    double alpha1_mass_n;
     Vector5d X_state_L, X_state_R;
     Vector5d H_state_avr, H_state_copy;
     Matrix5d LinJac_R;
@@ -405,12 +406,12 @@ void Solver_Isen::BN_BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshT
     //double etaP   = sol.etaRelax_(2);
     double tauP     = sol.tauRelax_(0);
     double tauU     = sol.tauRelax_(1);
-    double pref     = sol.pRef_;
-    double rhoref   = sol.mRef_;
+    //double pref     = sol.pRef_;
+    //double rhoref   = sol.mRef_;
 
     //Non-conservative products discretization
     Vector4d WaveSpeeds;
-    Vector5d Star_UP; 
+    Vector6d Star_UP; 
 
     //Cubic relaxation 
     Vector5d STerm, STerm_L, STerm_R;
@@ -473,6 +474,7 @@ void Solver_Isen::BN_BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshT
         }
         else{
 
+            /*
             //Source term U_L
             IsenBNSourceTerm(tauU, tauP, pref, rhoref,\
                     X_state_L, STerm_L,\
@@ -502,28 +504,66 @@ void Solver_Isen::BN_BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshT
                     H_state_copy,\
                     sol.SolTherm_\
                     );
+                    */
 
             if(TimeIntegrationType_=="Rosenbrock4"){
+
+                BN_RosenBrockFourthOrder(\
+                        tauP, tauU,\
+                        sol.SolTherm_,\
+                        X_state_L,\
+                        dtRelax\
+                        );
+
+                BN_RosenBrockFourthOrder(\
+                        tauP, tauU,\
+                        sol.SolTherm_,\
+                        X_state_R,\
+                        dtRelax\
+                        );
+
+                BN_RosenBrockFourthOrder(\
+                        tauP, tauU,\
+                        sol.SolTherm_,\
+                        H_state_copy,\
+                        dtRelax\
+                        );
+
             }
             else if(TimeIntegrationType_=="ImplicitEuler1"){
 
-                BN_ImplicitEuler(\
-                        X_state_L,\
-                        STerm_L, JacMatrix_L, Id,\
-                        dtRelax\
+                BN_ImplicitVelocityPressure(\
+                        X_state_L, sol.SolTherm_,\
+                        tauU, tauP, dtRelax\
+                        );
+                BN_ImplicitVelocityPressure(\
+                        X_state_R, sol.SolTherm_,\
+                        tauU, tauP, dtRelax\
+                        );
+                BN_ImplicitVelocityPressure(\
+                        H_state_copy, sol.SolTherm_,\
+                        tauU, tauP, dtRelax\
                         );
 
-                BN_ImplicitEuler(\
-                        X_state_R,\
-                        STerm_R, JacMatrix_R, Id,\
-                        dtRelax\
-                        );
+                /*
+                   BN_ImplicitEuler(\
+                   X_state_L,\
+                   STerm_L, JacMatrix_L, Id,\
+                   dtRelax\
+                   );
 
-                BN_ImplicitEuler(\
-                        H_state_copy,\
-                        STerm, JacMatrix, Id,\
-                        dtRelax\
-                        );
+                   BN_ImplicitEuler(\
+                   X_state_R,\
+                   STerm_R, JacMatrix_R, Id,\
+                   dtRelax\
+                   );
+
+                   BN_ImplicitEuler(\
+                   H_state_copy,\
+                   STerm, JacMatrix, Id,\
+                   dtRelax\
+                   );
+                 */
             }
             else if(TimeIntegrationType_=="ExplicitRungeKutta4"){
             }
@@ -533,12 +573,30 @@ void Solver_Isen::BN_BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshT
             Flux_L    = ConsVarFlux(W_state_L, sol.SolTherm_); 
             Flux_R    = ConsVarFlux(W_state_R, sol.SolTherm_); 
 
+            //FIXME
+            alpha1_mass_n = NConsFlux(0);
+            NConsFlux(0)  = ZERO;
         }
+
 
             //Gathering of the solution
             H_state_avr = H_state_copy -\
                           (dtRelax/SpaceStep)*(Flux_R - Flux_L)+\
                           (dtRelax/SpaceStep)*NConsFlux;
+
+            //FIXME
+            //Special treatment of the alpha1 equation
+            if(SourceTermType_!="none"){
+
+                BN_Pressure_DichotomyBS(\
+                        H_state_avr,\
+                        tauP, dtRelax,\
+                        SpaceStep,\
+                        sol.SolTherm_,\
+                        alpha1_mass_n,\
+                        epsDicho);
+            }
+                    
 
             //Update of the staggered solution
 
@@ -572,7 +630,7 @@ void Solver_Isen::BN_BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshT
 }
 
 Vector5d NConsFluxLoc(Vector5d& W_state_L, Vector5d& W_state_R,\
-        Vector4d& WaveSpeeds, Vector5d& Star_UP, string SchemeTypeNCons,\
+        Vector4d& WaveSpeeds, Vector6d& Star_UP, string SchemeTypeNCons,\
         ThermoLaw& Therm){
 
     Vector5d NConsFlux;
@@ -646,9 +704,9 @@ Vector5d NConsFluxLoc(Vector5d& W_state_L, Vector5d& W_state_R,\
     //HLLAC non-conservative products discretization
     else{
 
-        double u2_star   = Star_UP(2);
-        double p2_star_L = Star_UP(3);
-        double p2_star_R = Star_UP(4);
+        double u2_star   = Star_UP(3);
+        double p2_star_L = Star_UP(4);
+        double p2_star_R = Star_UP(5);
 
         NConsFlux<<-u2_star*(alpha1_R - alpha1_L),
             ZERO,
@@ -901,17 +959,27 @@ void Solver_Isen::BoundaryLayerFracStep(Sol_Isen& sol, Mesh& mesh){
     //Function
 
     double TimeStep       = TimeStep_;
-    double TimeStep_estim = Big;
     MeshTag = "Primal";
 
     //Pure time-relaxation update in a cell-loop
-    BoundaryLayerUpdateFracStep(sol, mesh, MeshTag,\
-            TimeStep, TimeStep_estim, VariableType);
+    /*
+       BoundaryLayerUpdateFracStep(sol, mesh, MeshTag,\
+       TimeStep, VariableType);
+     */
+
+    //Pure velocity time-relaxation update in a cell-loop
+    BoundaryLayerUpdateFracStepVelocity(sol, mesh, MeshTag,\
+            TimeStep, VariableType);
+
+    //Pure pressure time-relaxation update in a cell-loop
+    BoundaryLayerUpdateFracStepPressure(sol, mesh, MeshTag,\
+            TimeStep, VariableType);
+            
 
 }
 
 void Solver_Isen::BoundaryLayerUpdateFracStep(Sol_Isen& sol, Mesh& mesh, string MeshTag,\
-        double& dtRelax, double& dtRelax_estim, string VariableType){
+        double& dtRelax, string VariableType){
 
     //Local variables
     Vector5d W_state_cell;
@@ -987,11 +1055,7 @@ void Solver_Isen::BoundaryLayerUpdateFracStep(Sol_Isen& sol, Mesh& mesh, string 
 
             H_state_cell = NConsVarToConsVarLoc(W_state_cell, sol.SolTherm_);
 
-            if(sol.SolType_=="Convection Relaxation BN"){
-
-
-            }
-            else if(sol.SolType_=="Convection Relaxation Cubic BN"){
+                if(sol.SolType_=="Convection Relaxation Cubic BN"){
 
                 NonLinearSpring(TimeMat, H_state_cell, U_state_eq, STerm,\
                         RmatEigenVectors, RmatEigenVectorsInv);
@@ -1100,7 +1164,362 @@ void Solver_Isen::BoundaryLayerUpdateFracStep(Sol_Isen& sol, Mesh& mesh, string 
 
 }
 
+void Solver_Isen::BoundaryLayerUpdateFracStepVelocity(Sol_Isen& sol, Mesh& mesh, string MeshTag,\
+        double& dtRelax, string VariableType){
 
+    //Local variables
+    Vector5d W_state_cell;
+    Vector5d H_state_cell;
+
+    double dtRelax_face_ini = ZERO;
+    Matrix5d Id;
+    Id = Eigen::Matrix<double, 5, 5>::Identity();
+
+    //Function
+
+    //mesh inputs
+
+    //sol inputs
+    string LeftBCType  = sol.LeftBCType_;
+    string RightBCType = sol.RightBCType_;
+
+    //relaxation inputs
+    //double tauMin = sol.etaRelax_(0);
+    //double etaU   = sol.etaRelax_(1);
+    //double etaP   = sol.etaRelax_(2);
+
+    //relaxation inputs
+    double tauU     = sol.tauRelax_(1);
+    //double pref     = sol.pRef_;
+    //double rhoref   = sol.mRef_;
+
+    //Cubic relaxation 
+    Vector5d STerm, STerm_L, STerm_R;
+    Vector5d JacVector;
+    Matrix5d JacMatrix, JacMatrix_L, JacMatrix_R;
+
+    double NcellExt = mesh.Get_NcellExt();
+
+    //Reference state
+    Vector5d U_state_ref = NConsVarToConsVarLoc(sol.W_ref_, sol.SolTherm_);
+
+    //Equilibrium state
+    Vector5d U_state_eq = NConsVarToConsVarLoc(sol.W_eq_, sol.SolTherm_);
+
+    //Time matrix
+    Matrix5d TimeMat = sol.TimeMat_;
+
+    //Cubic relaxation
+    Vector5d One = VectorXd::Constant(5, ONE);
+
+    //Eigenvector base matrix
+    Matrix5d RmatEigenVectors   = sol.EigenVectorBasis_;
+   
+    //Eigenvector base inverse matrix
+    Matrix5d RmatEigenVectorsInv = sol.EigenVectorBasisInv_;
+
+    //Time-step fixed
+    dtRelax_face_ini   = dtRelax;
+
+    //Loop on the real-cells
+    for(int cell_id = 1; cell_id < NcellExt-1; cell_id++){
+
+        //Boundary Layer Resolution performed on the faces of the PRIMAL mesh
+        if (MeshTag =="Primal"){
+
+            W_state_cell = sol.NConsVar_.row(cell_id).transpose();
+        }
+        else{
+
+            cout<<"Inside BoundaryLayerUpdateFracStep: Dual mesh used!"<<endl;
+            exit(EXIT_FAILURE);
+
+        }
+
+        if(VariableType=="ConsVar"){
+
+            H_state_cell = NConsVarToConsVarLoc(W_state_cell, sol.SolTherm_);
+
+                if(sol.SolType_=="Convection Relaxation Cubic BN"){
+
+                NonLinearSpring(TimeMat, H_state_cell, U_state_eq, STerm,\
+                        RmatEigenVectors, RmatEigenVectorsInv);
+
+                JacVector = NonLinearSpringGradient(TimeMat, H_state_cell, U_state_eq,\
+                        RmatEigenVectorsInv);
+
+                if (TimeIntegrationType_=="Rosenbrock4"){
+
+                    RosenBrockFourthOrder(\
+                            TimeMat,\
+                            RmatEigenVectors, RmatEigenVectorsInv,\
+                            H_state_cell, U_state_ref, U_state_eq,\
+                            STerm, JacVector, One,\
+                            dtRelax_face_ini\
+                            );
+                }
+                else if (TimeIntegrationType_=="ImplicitEuler1"){
+
+                    ImplicitEuler(\
+                            TimeMat,\
+                            RmatEigenVectors, RmatEigenVectorsInv,\
+                            H_state_cell, U_state_ref, U_state_eq,\
+                            STerm, JacVector, One,\
+                            dtRelax_face_ini\
+                            );
+                }
+            }
+            else if(sol.SolType_=="BN Relaxation"){
+
+
+                if(TimeIntegrationType_=="Rosenbrock4"){
+                }
+
+                else if(TimeIntegrationType_=="ImplicitEuler1"){
+
+                    BN_ImplicitVelocity(\
+                            H_state_cell,\
+                            tauU, dtRelax_face_ini\
+                            );
+                }
+            }
+
+            //Update of the staggered solution
+
+            //PRIMAL mesh --> PRIMAL mesh update
+            //Because we are in a fractional step strategy
+            if (MeshTag =="Primal"){
+
+                sol.ConsVar_.row(cell_id) = H_state_cell.transpose();
+
+                if (LeftBCType=="transparent" && RightBCType=="transparent" ){
+
+                    sol.ConsVar_.row(0)          = sol.ConsVar_.row(1);
+                    sol.ConsVar_.row(NcellExt-1) = sol.ConsVar_.row(NcellExt-2);
+
+                }
+
+            }
+            //DUAL mesh --> PRIMAL update + Imposed boundary conditions
+            else{
+
+                cout<<"Inside BoundaryLayerUpdateFracStep: Dual mesh used!"<<endl;
+                exit(EXIT_FAILURE);
+
+            }
+
+        }
+    }
+
+    //Update of the variable arrays
+    if(VariableType=="EqRelaxVar"){
+
+        if(MeshTag=="Primal"){
+
+            sol.EqRelaxToNConsVar("Primal");
+        }
+        else if(MeshTag=="Dual"){
+
+            cout<<"Inside BoundaryLayerUpdateFracStep: Dual mesh used!"<<endl;
+            exit(EXIT_FAILURE);
+        }
+    }
+    else if(VariableType=="ConsVar"){
+
+        if(MeshTag=="Primal"){
+
+            sol.ConsVarToNConsVar("Primal");
+        }
+        else if(MeshTag=="Dual"){
+
+            cout<<"Inside BoundaryLayerUpdateFracStep: Dual mesh used!"<<endl;
+            exit(EXIT_FAILURE);
+        }
+    }
+
+}
+
+void Solver_Isen::BoundaryLayerUpdateFracStepPressure(Sol_Isen& sol, Mesh& mesh, string MeshTag,\
+        double& dtRelax, string VariableType){
+
+    //Local variables
+    Vector5d W_state_cell;
+    Vector5d H_state_cell;
+
+    double dtRelax_face_ini = ZERO;
+    Matrix5d Id;
+    Id = Eigen::Matrix<double, 5, 5>::Identity();
+
+    //Function
+
+    //mesh inputs
+
+    //sol inputs
+    string LeftBCType  = sol.LeftBCType_;
+    string RightBCType = sol.RightBCType_;
+
+    //relaxation inputs
+    //double tauMin = sol.etaRelax_(0);
+    //double etaU   = sol.etaRelax_(1);
+    //double etaP   = sol.etaRelax_(2);
+
+    //relaxation inputs
+    double tauP     = sol.tauRelax_(0);
+
+    //Cubic relaxation 
+    Vector5d STerm, STerm_L, STerm_R;
+    Vector5d JacVector;
+    Matrix5d JacMatrix, JacMatrix_L, JacMatrix_R;
+
+    double NcellExt = mesh.Get_NcellExt();
+
+    //Reference state
+    Vector5d U_state_ref = NConsVarToConsVarLoc(sol.W_ref_, sol.SolTherm_);
+
+    //Equilibrium state
+    Vector5d U_state_eq = NConsVarToConsVarLoc(sol.W_eq_, sol.SolTherm_);
+
+    //Time matrix
+    Matrix5d TimeMat = sol.TimeMat_;
+
+    //Cubic relaxation
+    Vector5d One = VectorXd::Constant(5, ONE);
+
+    //Eigenvector base matrix
+    Matrix5d RmatEigenVectors   = sol.EigenVectorBasis_;
+   
+    //Eigenvector base inverse matrix
+    Matrix5d RmatEigenVectorsInv = sol.EigenVectorBasisInv_;
+
+    //Time-step fixed
+    dtRelax_face_ini   = dtRelax;
+
+    //Loop on the real-cells
+    for(int cell_id = 1; cell_id < NcellExt-1; cell_id++){
+
+        //Boundary Layer Resolution performed on the faces of the PRIMAL mesh
+        if (MeshTag =="Primal"){
+
+            W_state_cell = sol.NConsVar_.row(cell_id).transpose();
+        }
+        else{
+
+            cout<<"Inside BoundaryLayerUpdateFracStep: Dual mesh used!"<<endl;
+            exit(EXIT_FAILURE);
+
+        }
+
+        if(VariableType=="ConsVar"){
+
+            H_state_cell = NConsVarToConsVarLoc(W_state_cell, sol.SolTherm_);
+
+                if(sol.SolType_=="Convection Relaxation Cubic BN"){
+
+                NonLinearSpring(TimeMat, H_state_cell, U_state_eq, STerm,\
+                        RmatEigenVectors, RmatEigenVectorsInv);
+
+                JacVector = NonLinearSpringGradient(TimeMat, H_state_cell, U_state_eq,\
+                        RmatEigenVectorsInv);
+
+                if (TimeIntegrationType_=="Rosenbrock4"){
+
+                    RosenBrockFourthOrder(\
+                            TimeMat,\
+                            RmatEigenVectors, RmatEigenVectorsInv,\
+                            H_state_cell, U_state_ref, U_state_eq,\
+                            STerm, JacVector, One,\
+                            dtRelax_face_ini\
+                            );
+                }
+                else if (TimeIntegrationType_=="ImplicitEuler1"){
+
+                    ImplicitEuler(\
+                            TimeMat,\
+                            RmatEigenVectors, RmatEigenVectorsInv,\
+                            H_state_cell, U_state_ref, U_state_eq,\
+                            STerm, JacVector, One,\
+                            dtRelax_face_ini\
+                            );
+                }
+            }
+            else if(sol.SolType_=="BN Relaxation"){
+
+
+                if(TimeIntegrationType_=="Rosenbrock4"){
+                }
+
+                else if(TimeIntegrationType_=="ImplicitEuler1"){
+
+
+                    BN_ImplicitPressure(\
+                            H_state_cell, sol.SolTherm_,\
+                            tauP, dtRelax_face_ini\
+                            );
+
+                    /*
+                    BN_Pressure_Dichotomy(\
+                            H_state_cell,\
+                            tauP, dtRelax_face_ini,\
+                            sol.SolTherm_,\
+                            epsDicho);
+                            */
+                }
+            }
+
+            //Update of the staggered solution
+
+            //PRIMAL mesh --> PRIMAL mesh update
+            //Because we are in a fractional step strategy
+            if (MeshTag =="Primal"){
+
+                sol.ConsVar_.row(cell_id) = H_state_cell.transpose();
+
+                if (LeftBCType=="transparent" && RightBCType=="transparent" ){
+
+                    sol.ConsVar_.row(0)          = sol.ConsVar_.row(1);
+                    sol.ConsVar_.row(NcellExt-1) = sol.ConsVar_.row(NcellExt-2);
+
+                }
+
+            }
+            //DUAL mesh --> PRIMAL update + Imposed boundary conditions
+            else{
+
+                cout<<"Inside BoundaryLayerUpdateFracStep: Dual mesh used!"<<endl;
+                exit(EXIT_FAILURE);
+
+            }
+
+        }
+    }
+
+    //Update of the variable arrays
+    if(VariableType=="EqRelaxVar"){
+
+        if(MeshTag=="Primal"){
+
+            sol.EqRelaxToNConsVar("Primal");
+        }
+        else if(MeshTag=="Dual"){
+
+            cout<<"Inside BoundaryLayerUpdateFracStep: Dual mesh used!"<<endl;
+            exit(EXIT_FAILURE);
+        }
+    }
+    else if(VariableType=="ConsVar"){
+
+        if(MeshTag=="Primal"){
+
+            sol.ConsVarToNConsVar("Primal");
+        }
+        else if(MeshTag=="Dual"){
+
+            cout<<"Inside BoundaryLayerUpdateFracStep: Dual mesh used!"<<endl;
+            exit(EXIT_FAILURE);
+        }
+    }
+
+}
 
 /************************************************/
 /*****************  CONVECTION  *****************/
@@ -1397,13 +1816,29 @@ void Solver_Isen::Simulation(Sol_Isen& sol, Mesh& mesh,\
     double TauMin = sol.etaRelax_(0);
     dtRelax_ = CourantBL_*TauMin;
 
+    //double TimeCounter = ONE;
+    //double TimeSlope   = HUNDRED;
+
     while(TimeElapsed_ < SimulationTime_){
+    //while(TimeCounter < THREE){
 
         //The fractional step strategy is triggered
         if(FractionalStep_==true){
 
             //Update of the discrete timestep for the convection part
             TimeStepUpdate(sol, mesh);
+
+            //Time modulation
+            /*
+            if(TimeCounter < TimeSlope){
+
+                cout<<"old TimeStep = "<<TimeStep_<<endl;
+                TimeStep_   *= (TimeCounter/TimeSlope);
+                TimeCounter +=ONE;
+                cout<<"TimeCounter  = "<<TimeCounter<<endl;
+                cout<<"new TimeStep = "<<TimeStep_<<endl;
+            }
+            */
 
             //Classical Update of the time step
             TimeElapsed_+=TimeStep_;
@@ -1438,6 +1873,8 @@ void Solver_Isen::Simulation(Sol_Isen& sol, Mesh& mesh,\
 
             //Classical Update of the time step
             TimeElapsed_+=TimeStep_;
+
+            //cout<<"TimeStep = "<<TimeStep_<<endl;
 
             //FIXME
             //WARNING after BoundaryLayer the
@@ -1660,6 +2097,44 @@ void Solver_Isen::Save_Sol(string FileOutputFormat, string FileName,\
             }
             file<<endl;
 
+            file<<"SCALARS "<<"M1"<<" double 1"<<endl;
+            file<<"LOOKUP_TABLE default"<<endl;
+            for (int i=0; i<NcellExt;i++){
+
+                file<<std::setprecision(COUT_PRECISION)<<std::scientific<<sol.ConsVar_(i,1)<<endl;
+
+            }
+            file<<endl;
+
+
+            file<<"SCALARS "<<"M2"<<" double 1"<<endl;
+            file<<"LOOKUP_TABLE default"<<endl;
+            for (int i=0; i<NcellExt;i++){
+
+                file<<std::setprecision(COUT_PRECISION)<<std::scientific<<sol.ConsVar_(i,3)<<endl;
+
+            }
+            file<<endl;
+
+            file<<"SCALARS "<<"M"<<" double 1"<<endl;
+            file<<"LOOKUP_TABLE default"<<endl;
+            for (int i=0; i<NcellExt;i++){
+
+                file<<std::setprecision(COUT_PRECISION)<<std::scientific<<sol.ConsVar_(i,1) + \
+                    sol.ConsVar_(i,3)<<endl;
+
+            }
+            file<<endl;
+
+            file<<"SCALARS "<<"MU"<<" double 1"<<endl;
+            file<<"LOOKUP_TABLE default"<<endl;
+            for (int i=0; i<NcellExt;i++){
+
+                file<<std::setprecision(COUT_PRECISION)<<std::scientific<<sol.ConsVar_(i,2) + \
+                    sol.ConsVar_(i,4)<<endl;
+
+            }
+            file<<endl;
             /*********************************/
             /******* EXACT SOLUTION  *********/
             /*********************************/
@@ -1814,6 +2289,7 @@ void Solver_Isen::Save_Sol(string FileOutputFormat, string FileName,\
             file<<"x"<<" "<<"y"<<" "<<"z"<<" "\
                 <<"Alpha1"<<" "<<"P1"<<" "<<"U1"<<" "<<"P2"<<" "<<"U2"<<" "\
                 <<"U"<<" "<<"P"<<" "<<"dU"<<" "<<"dP"<<" "\
+                <<"M1"<<" "<<"M"<<" "<<"MU"<<" "\
                 <<"Alpha1_ex"<<" "<<"P1_ex"<<" "<<"U1_ex"<<" "<<"P2_ex"<<" "\
                 <<"U2_ex"<<" "\
                 <<"U_ex"<<" "<<"P_ex"<<" "<<"dU_ex"<<" "<<"dP_ex"<<endl;
@@ -1831,6 +2307,8 @@ void Solver_Isen::Save_Sol(string FileOutputFormat, string FileName,\
                     <<sol.NConsVar_(i,4)<<" "<<sol.NConsVarEqRelax_(i,1)<<" "\
                     <<sol.NConsVarEqRelax_(i,2)<<" "<<sol.NConsVarEqRelax_(i,3)<<" "\
                     <<sol.NConsVarEqRelax_(i,4)<<" "\
+                    <<sol.ConsVar_(i,1)<<" "<<sol.ConsVar_(i,1) + sol.ConsVar_(i,3)<<" "\
+                    <<sol.ConsVar_(i,2) + sol.ConsVar_(i,4)<<" "\
                     <<sol.SolExact_(i,0)<<" "<<sol.SolExact_(i,1)<<" "\
                     <<sol.SolExact_(i,2)<<" "<<sol.SolExact_(i,3)<<" "\
                     <<sol.SolExact_(i,4)<<" "<<sol.SolExactEqRelax_(i,1)<<" "\
@@ -1962,6 +2440,7 @@ Vector2d  LocalCourant_LSTEq(Vector5d& W_state0, Vector5d& W_state_L, Vector5d& 
         int face_id\
         ){
 
+    /*
     //Local variables
     Vector2d TimeVector;
     double alpha1_avr, alpha2_avr, rho1_avr, rho2_avr, p1_avr, p2_avr;
@@ -2028,7 +2507,7 @@ Vector2d  LocalCourant_LSTEq(Vector5d& W_state0, Vector5d& W_state_L, Vector5d& 
     Vector5d a_n   = RmatEigenVectorsInv*(U_state_avr);
     Vector5d a_inf = RmatEigenVectorsInv*(U_eq);
 
-    double CofacAlpha1 = ZERO;
+    //double CofacAlpha1 = ZERO;
     double a_min = ZERO;
     double a_max = ONE;
 
@@ -2037,7 +2516,7 @@ Vector2d  LocalCourant_LSTEq(Vector5d& W_state0, Vector5d& W_state_L, Vector5d& 
     //Case very close to the equilibrium state
     if ( fabs(a_n(0) - a_inf(0)) < epsZero){
 
-        CofacAlpha1 = Big;
+        //CofacAlpha1 = Big;
 
     }
 
@@ -2045,7 +2524,7 @@ Vector2d  LocalCourant_LSTEq(Vector5d& W_state0, Vector5d& W_state_L, Vector5d& 
     else if ( a_n(0) > a_inf(0)){
 
         //cout<<" a_n > a_inf --> [0,.."<<endl;
-        CofacAlpha1 = ((a_min - a_n(0))*pow(a_ref(0), TWO))/pow(a_inf(0) - a_n(0), THREE);
+        //CofacAlpha1 = ((a_min - a_n(0))*pow(a_ref(0), TWO))/pow(a_inf(0) - a_n(0), THREE);
         //cout<<"CofacAlpha1 = "<<CofacAlpha1<<endl;
 
     }
@@ -2053,7 +2532,7 @@ Vector2d  LocalCourant_LSTEq(Vector5d& W_state0, Vector5d& W_state_L, Vector5d& 
     else{
 
         //cout<<" a_n < a_inf --> ..,1]"<<endl;
-        CofacAlpha1 = ((a_max - a_n(0))*pow(a_ref(0), TWO))/pow(a_inf(0) - a_n(0), THREE); 
+        //CofacAlpha1 = ((a_max - a_n(0))*pow(a_ref(0), TWO))/pow(a_inf(0) - a_n(0), THREE); 
         //cout<<"CofacAlpha1 = "<<CofacAlpha1<<endl;
 
     }
@@ -2095,6 +2574,11 @@ Vector2d  LocalCourant_LSTEq(Vector5d& W_state0, Vector5d& W_state_L, Vector5d& 
     TimeLoc(0) = Damp*dtRelax;
     TimeLoc(1) = Damp*dtConv;
 
+    */
+
+    Vector2d TimeLoc;
+    TimeLoc(0) =Big;
+    TimeLoc(1) =Big;
     return TimeLoc;
 
 }
@@ -3245,6 +3729,453 @@ void BN_ImplicitEuler(\
 
 }
 
+//Implicit time integration of order 1 method for the Velocity Baer-Nunziato 
+void BN_ImplicitVelocity(\
+        Vector5d& U_state_ini,\
+        double tauU, double& dtRelax_ini\
+        ){
+
+    //Local variables
+    double m1    = U_state_ini(1);
+    double m1u1  = U_state_ini(2);
+    double m2    = U_state_ini(3);
+    double m2u2  = U_state_ini(4);
+    double m     = m1 + m2;
+    double Y1    = m1/m;
+    double Y2    = m2/m;
+    double tadim = dtRelax_ini/tauU;
+
+    double TimeDenom = ONE/(ONE + tadim);
+    double w1        = Y1*tadim*TimeDenom; 
+    double w2        = Y2*tadim*TimeDenom; 
+
+    double m1u1_up = (TimeDenom + w1)*m1u1 + w1*m2u2;
+    double m2u2_up = w2*m1u1 + (TimeDenom + w2)*m2u2;
+
+    U_state_ini(2) = m1u1_up;
+    U_state_ini(4) = m2u2_up;
+
+    return;
+
+}
+
+//Implicit time integration of order 1 method for the Pressure Baer-Nunziato 
+void BN_ImplicitPressure(\
+        Vector5d& U_state_ini, ThermoLaw& Therm,\
+        double tauP, double& dtRelax_ini\
+        ){
+
+    //Local variables
+    Vector5d W_state_ini = ConsVarToNConsVarLoc(U_state_ini, Therm); 
+    double alpha1 = W_state_ini(0);
+    double alpha2 = ONE - alpha1;
+    double p1     = W_state_ini(1);
+    double p2     = W_state_ini(3);
+    double dp     = p2 - p1;
+    double P      = p2 + p1;
+    double rho1   = Density_EOS(1, Therm, p1, ZERO);
+    double rho2   = Density_EOS(2, Therm, p2, ZERO);
+    double c1     = Sound_Speed_EOS(1, Therm, rho1, p1);
+    double c2     = Sound_Speed_EOS(1, Therm, rho2, p2);
+    double C1     = rho1*c1*c1;
+    double C2     = rho2*c2*c2;
+    double tadim  = dtRelax_ini/tauP;
+    double noneq  = (ONE - TWO*alpha1)*(dp/P);
+    double Pt     = (alpha1*C2 + alpha2*C1) - (alpha1*C2 - alpha2*C1)*(dp/P);
+
+    // Gallouet et al. alpha1 update
+    /*
+       double alpha1_up = (alpha1/alpha2)*exp(-tadim*(dp/P))/(ONE +(alpha1/alpha2)*\
+       exp(-tadim*(dp/P))); 
+     */
+
+    //BS alpha1 update
+    double alpha1_up = alpha1 - tadim*(alpha1*alpha2)*(dp/P)/\
+                       ( ONE + tadim*(noneq + Pt/P)); 
+
+    if( fabs(alpha1_up - ONE) < 0.0001*epsZero || alpha1_up < 0.0001*epsZero){
+
+        cout<<"Inside BN_ImplicitPressure: alpha1 vanishing phase"<<endl;
+        exit(EXIT_FAILURE);
+    }
+    /*
+       double alpha2_up = ONE - alpha1_up;
+
+    double alpha = exp( -tadim*( (alpha1*C2 + alpha2*C1)/P ) );
+    double beta  = exp(  tadim*(alpha2*C1/p1 - alpha1*C2/p2)*(dp/P) );
+    double beta  = pow(alpha1_up/alpha1, - C1/p1)*\
+                   pow(alpha2_up/alpha2, - C2/p2);
+
+    double p1_up = ONE_OVER_TWO*( -(dp*alpha) + sqrt( (dp*alpha*dp*alpha) \
+                + FOUR*beta*p1*p2 ) );
+
+    double p2_up = (p1*p2)*beta/p1_up;
+    */
+
+    //W_state_ini update
+    //FIXME
+    //W_state_ini(0) = alpha1_up;
+    U_state_ini(0) = alpha1_up;
+    //W_state_ini(1) = p1_up;
+    //W_state_ini(3) = p2_up;
+
+    //U_state_ini = NConsVarToConsVarLoc(W_state_ini, Therm);
+
+    return;
+
+}
+
+//Simultaneous implicit time integration of order 1 for the Velocity-Pressure Baer-Nunziato
+void BN_ImplicitVelocityPressure(\
+        Vector5d& U_state_ini, ThermoLaw& Therm,\
+        double tauU, double tauP, double& dtRelax_ini\
+        ){
+
+    //Pressure relaxation
+    //Vector5d W_state_ini = ConsVarToNConsVarLoc(U_state_ini, Therm); 
+    //double alpha1 = W_state_ini(0);
+    //double alpha2 = ONE - alpha1;
+    //double p1     = W_state_ini(1);
+    //double p2     = W_state_ini(3);
+    //double dp     = p2 - p1;
+    //double P      = p2 + p1;
+    //double rho1   = Density_EOS(1, Therm, p1, ZERO);
+    //double rho2   = Density_EOS(2, Therm, p2, ZERO);
+    //double c1     = Sound_Speed_EOS(1, Therm, rho1, p1);
+    //double c2     = Sound_Speed_EOS(1, Therm, rho2, p2);
+    //double C1     = rho1*c1*c1;
+    //double C2     = rho2*c2*c2;
+
+    double tadim  = dtRelax_ini/tauP;
+    //double noneq  = (ONE - TWO*alpha1)*(dp/P);
+    //double Pt     = (alpha1*C2 + alpha2*C1) - (alpha1*C2 - alpha2*C1)*(dp/P);
+    //noneq = ZERO;
+
+    //Velocity relaxation
+    double m1   = U_state_ini(1);
+    double m1u1 = U_state_ini(2);
+    double m2   = U_state_ini(3);
+    double m2u2 = U_state_ini(4);
+    double m    = m1 + m2;
+    double Y1   = m1/m;
+    double Y2   = m2/m;
+
+    double TimeDenom = ONE/(ONE + tadim);
+    double w1        = Y1*tadim*TimeDenom; 
+    double w2        = Y2*tadim*TimeDenom; 
+
+    double m1u1_up = (TimeDenom + w1)*m1u1 + w1*m2u2;
+    double m2u2_up = w2*m1u1 + (TimeDenom + w2)*m2u2;
+
+    //m1u1 m2u2 updates
+    U_state_ini(2) = m1u1_up;
+    U_state_ini(4) = m2u2_up;
+
+    //FIXME
+    //Pressure relaxation Bereux-Sainsaulieu
+    
+    /* 
+       double alpha1_up = alpha1 - tadim*(alpha1*alpha2)*(dp/P)/\
+       ( ONE + tadim*(noneq + Pt/P)); 
+     */
+                       
+    /*
+    BN_Pressure_Dichotomy(\
+            U_state_ini,\
+            tauP, dtRelax_ini,\
+            Therm,\
+            epsDicho);
+            */
+            
+
+    //U_state_ini update
+    //U_state_ini(0) = alpha1_up;
+
+    return;
+
+}
+
+double  AlphaRelaxFunction(\
+        double alpha1,\
+        Vector5d& U_state_ini,\
+        double tauP, double dtRelax_ini,\
+        ThermoLaw& Therm\
+        ){
+
+    //local variables
+
+    //State at time t^n
+    double alpha1_n = U_state_ini(0);
+    double alpha2_n = ONE - alpha1_n;
+    double m1_n     = U_state_ini(1);
+    double m2_n     = U_state_ini(3);
+    double p1_n     = Pressure_EOS(1, Therm, m1_n/alpha1_n, ZERO);
+    double p2_n     = Pressure_EOS(2, Therm, m2_n/alpha2_n, ZERO);
+    double cofac    = (dtRelax_ini/tauP)*(alpha1_n*alpha2_n/(p2_n + p1_n)); 
+
+    //New pressure
+    double p1  = Pressure_EOS(1, Therm, m1_n/alpha1, ZERO);
+    double p2  = Pressure_EOS(2, Therm, m2_n/(ONE - alpha1), ZERO);
+    double dp  = p2 - p1;
+
+    return alpha1 + cofac*dp - alpha1_n;
+    
+}
+
+double  AlphaRelaxFunctionBS(\
+        double& alpha1,\
+        Vector5d& U_state_ini,\
+        double tauP, double dtRelax_ini,\
+        double SpaceStep,\
+        ThermoLaw& Therm,\
+        double alpha1_mass_n\
+        ){
+
+    //local variables
+
+    //State at time t^n
+    double alpha1_n = U_state_ini(0);
+    double alpha2_n = ONE - alpha1_n;
+    double m1_n     = U_state_ini(1);
+    double m2_n     = U_state_ini(3);
+    double p1_n     = Pressure_EOS(1, Therm, m1_n/alpha1_n, ZERO);
+    double p2_n     = Pressure_EOS(2, Therm, m2_n/alpha2_n, ZERO);
+    double cofac    = (dtRelax_ini/tauP)*(alpha1_n*alpha2_n/(p2_n + p1_n)); 
+
+    //New pressure
+    double p1  = Pressure_EOS(1, Therm, m1_n/alpha1, ZERO);
+    double p2  = Pressure_EOS(2, Therm, m2_n/(ONE - alpha1), ZERO);
+    double dp  = p2 - p1;
+
+    //cout<<"Alpha1 = "<<alpha1<<endl;
+    /*
+       cout<<"Inside AlphaRelaxFunctionBS: dp            = "<<dp<<endl;
+       cout<<"Inside AlphaRelaxFunctionBS: frozen alpha1 = "<<alpha1_n + (dtRelax_ini/SpaceStep)*alpha1_mass_n<<endl;
+       cout<<"Inside AlphaRelaxFunctionBS: cofac*dp      = "<<cofac*dp<<endl;
+       cout<<"Inside AlphaRelaxFunctionBS: all           = "<<alpha1 + cofac*dp - alpha1_n - (dtRelax_ini/SpaceStep)*alpha1_mass_n<<endl;
+     */
+
+    return alpha1 + cofac*dp - alpha1_n - (dtRelax_ini/SpaceStep)*alpha1_mass_n;
+    
+}
+
+double AlphaDichotomy(\
+        Vector5d& U_state_ini,\
+        double tauP, double dtRelax_ini,\
+        ThermoLaw& Therm,\
+        double& alpha1_inf, double& alpha1_sup,\
+        double& eps){
+
+    //Local variables
+    double alpha1_star = ZERO;
+    double alpha1_mid  = (alpha1_inf + alpha1_sup)/TWO;
+
+    double Finf = AlphaRelaxFunction(\
+            alpha1_inf,\
+            U_state_ini,\
+            tauP, dtRelax_ini,\
+            Therm\
+            );
+
+    double Fmid = AlphaRelaxFunction(\
+            alpha1_mid,\
+            U_state_ini,\
+            tauP, dtRelax_ini,\
+            Therm\
+            );
+
+    //cout<<"Inside AlphaDichotomy: Fmid = "<<Fmid<<endl;
+
+    double Fsup = AlphaRelaxFunction(\
+            alpha1_sup,\
+            U_state_ini,\
+            tauP, dtRelax_ini,\
+            Therm\
+            );
+           
+    //Function
+
+    if(Finf*Fsup>= ZERO){
+
+	cout<<"Alert AlphaDichotomy: Finf Fsup of same sign !"<<endl;
+	exit(EXIT_FAILURE);
+
+    }
+    else if(fabs(Fmid)<=eps){
+
+        return alpha1_mid;
+
+    }
+    else{
+
+        if(Finf*Fmid<ZERO){
+
+            alpha1_star = AlphaDichotomy(\
+                    U_state_ini,\
+                    tauP, dtRelax_ini,\
+                    Therm,\
+                    alpha1_inf, alpha1_mid,\
+                    eps);
+        }
+        else {
+
+            alpha1_star = AlphaDichotomy(\
+                    U_state_ini,\
+                    tauP, dtRelax_ini,\
+                    Therm,\
+                    alpha1_mid, alpha1_sup,\
+                    eps);
+        }
+
+    }
+
+    return alpha1_star;
+}
+
+double AlphaDichotomyBS(\
+        Vector5d& U_state_ini,\
+        double tauP, double dtRelax_ini,\
+        double SpaceStep,\
+        ThermoLaw& Therm,\
+        double alpha1_inf, double alpha1_sup,\
+        double alpha1_mass_n,\
+        double eps){
+
+    //Local variables
+    double alpha1_star = ZERO;
+    double Finf        = ZERO;
+    double Fmid        = ZERO;
+    double Fsup        = ZERO;
+    double alpha1_mid  = (alpha1_inf + alpha1_sup)/TWO;
+
+    /*
+    cout<<"Dichotomy BS: alpha1_inf = "<<alpha1_inf<<", alpha1_mid = "<<alpha1_mid<<", alpha1_sup = "<<alpha1_sup<<endl;
+*/
+
+    //cout<<"Finf: "<<endl;
+    Finf = AlphaRelaxFunctionBS(\
+            alpha1_inf,\
+            U_state_ini,\
+            tauP, dtRelax_ini,\
+            SpaceStep,\
+            Therm,\
+            alpha1_mass_n\
+            );
+
+    //cout<<"Fmid: "<<endl;
+    Fmid = AlphaRelaxFunctionBS(\
+            alpha1_mid,\
+            U_state_ini,\
+            tauP, dtRelax_ini,\
+            SpaceStep,\
+            Therm,\
+            alpha1_mass_n\
+            );
+
+    //cout<<"Fsup: "<<endl;
+    Fsup = AlphaRelaxFunctionBS(\
+            alpha1_sup,\
+            U_state_ini,\
+            tauP, dtRelax_ini,\
+            SpaceStep,\
+            Therm,\
+            alpha1_mass_n\
+            );
+    //cout<<"Inside AlphaDichotomy: Fmid = "<<Fmid<<endl;
+
+           
+    //Function
+
+    if(fabs(Fmid)<=eps){
+
+        return alpha1_mid;
+
+    }
+    else if(Finf*Fsup>= ZERO){
+
+        cout<<"Alert AlphaDichotomy BS: Finf Fsup of same sign !"<<endl;
+        exit(EXIT_FAILURE);
+
+    }
+    else{
+
+        if(Finf*Fmid<ZERO){
+
+            alpha1_star = AlphaDichotomyBS(\
+                    U_state_ini,\
+                    tauP, dtRelax_ini,\
+                    SpaceStep,\
+                    Therm,\
+                    alpha1_inf, alpha1_mid,\
+                    alpha1_mass_n,\
+                    eps);
+        }
+        else {
+
+            alpha1_star = AlphaDichotomyBS(\
+                    U_state_ini,\
+                    tauP, dtRelax_ini,\
+                    SpaceStep,\
+                    Therm,\
+                    alpha1_mid, alpha1_sup,\
+                    alpha1_mass_n,\
+                    eps);
+        }
+    }
+
+    return alpha1_star;
+}
+
+void BN_Pressure_Dichotomy(\
+        Vector5d& U_state_ini,\
+        double tauP, double dtRelax_ini,\
+        ThermoLaw& Therm,\
+        double& eps){
+
+    double alpha1_inf_ini = eps;
+    double alpha1_sup_ini = ONE - eps;
+
+    //Dichotomy new volume fraction
+    double alpha1_ini = AlphaDichotomy(\
+            U_state_ini,\
+            tauP, dtRelax_ini,\
+            Therm,\
+            alpha1_inf_ini, alpha1_sup_ini,\
+            eps);
+
+    //cout<<"Inside Pressure_Dichotomy: alpha1_new = "<<alpha1_ini<<endl;
+
+    //Update
+    U_state_ini(0) = alpha1_ini;
+}
+
+void BN_Pressure_DichotomyBS(\
+        Vector5d& U_state_ini,\
+        double tauP, double dtRelax_ini,\
+        double SpaceStep,\
+        ThermoLaw& Therm,\
+        double alpha1_mass_n,\
+        double& eps){
+
+    double alpha1_inf_ini = eps;
+    double alpha1_sup_ini = ONE - eps;
+
+    //Dichotomy new volume fraction
+    double alpha1_ini = AlphaDichotomyBS(\
+            U_state_ini,\
+            tauP, dtRelax_ini,\
+            SpaceStep,\
+            Therm,\
+            alpha1_inf_ini, alpha1_sup_ini,\
+            alpha1_mass_n,\
+            eps);
+
+    //cout<<"Inside Pressure_Dichotomy: alpha1_new = "<<alpha1_ini<<endl;
+
+    //Update
+    U_state_ini(0) = alpha1_ini;
+}
+
 //Rosenbrock of order 4 method
 void RosenBrockFourthOrder(\
         Matrix5d& TauMat,\
@@ -3313,6 +4244,126 @@ void RosenBrockFourthOrder(\
     //Deriving g4 vector:
     g4 = DistanceDiagMat*\
          (STerm_ini + C41*g1/dtRelax_ini + C42*g2/dtRelax_ini + C43*g3/dtRelax_ini);
+
+    //Updating U_state_ini
+    //ORDER4
+    U_state_ini  = U_state_sav + B1*g1 + B2*g2 + B3*g3 + B4*g4;
+
+}
+
+//BN Rosenbrock of order 4 method
+void BN_RosenBrockFourthOrder(\
+        double tauP, double tauU,\
+        ThermoLaw& Therm,\
+        Vector5d& U_state_ini,\
+        double& dtRelax_ini\
+        ){
+
+    //SHAMPINE COEFFICIENTS FOR THE ROSENBROCK ORDER 4 METHOD
+    //FIXME
+    const double GAM = ONE_OVER_TWO;
+    //const double GAM = ONE;
+
+    //Rmk: the fourth line of coefficients is not provided because
+    //at the fourth sub-step, f(y) used is f(y) of the third sub-step
+    const double A21 = TWO;
+    const double A31 = 48./25., A32 = 6./25.;
+
+    //FIXME
+    //B1 = ONE
+    const double B1 = 19./9., B2 = ONE_OVER_TWO, B3 = 25./108., B4 = 125./108.;
+
+    const double C21 = -8.;
+    const double C31 = 372./25., C32 = 12./5.;
+    const double C41 = -112./125., C42 = -54./125., C43 = -2./5.;
+
+    //Saving initial state
+    Vector5d U_state_sav = U_state_ini;
+
+    //Initializing source terms
+    Vector5d STerm_ini = VectorXd::Zero(5);
+    BN_SourceTerm(tauU, tauP,\
+            U_state_ini, STerm_ini,\
+            Therm\
+            );
+    Vector5d STerm_sav   = STerm_ini;
+
+    //local variables
+    VectorXd g1 = VectorXd::Zero(5);
+    VectorXd g2 = VectorXd::Zero(5);
+    VectorXd g3 = VectorXd::Zero(5);
+    VectorXd g4 = VectorXd::Zero(5);
+    VectorXd g5 = VectorXd::Zero(5);
+
+    Vector5d W_state_ini = ConsVarToNConsVarLoc(U_state_ini, Therm); 
+    double alpha1 = W_state_ini(0);
+    double alpha2 = ONE - alpha1;
+    double p1     = W_state_ini(1);
+    double p2     = W_state_ini(3);
+    double dp     = p2 - p1;
+    double P      = p2 + p1;
+    double rho1   = Density_EOS(1, Therm, p1, ZERO);
+    double rho2   = Density_EOS(2, Therm, p2, ZERO);
+    double c1     = Sound_Speed_EOS(1, Therm, rho1, p1);
+    double c2     = Sound_Speed_EOS(1, Therm, rho2, p2);
+    double C1     = rho1*c1*c1;
+    double C2     = rho2*c2*c2;
+
+    double noneq  = (ONE - TWO*alpha1)*(dp/P);
+    double Pt     = (alpha1*C2 + alpha2*C1) - (alpha1*C2 - alpha2*C1)*(dp/P);
+    //noneq = ZERO;
+
+    double alpha_relax = -(ONE/tauP)*(noneq + Pt/P); 
+    double P_relax = (GAM*dtRelax_ini)/(ONE  - (GAM*dtRelax_ini*alpha_relax));
+    double U_relax = (GAM*dtRelax_ini)/(ONE + GAM*dtRelax_ini/tauU);
+
+    //Function
+
+    //Deriving g1 vector:
+    g1(0) = P_relax*STerm_sav(0); 
+    g1(2) = U_relax*STerm_sav(2);
+    g1(4) = U_relax*STerm_sav(4);
+
+    //Updating the state using the new slope g1
+    U_state_ini = U_state_sav + A21*g1;
+
+    //Updating STerm 
+    BN_SourceTerm(tauU, tauP,\
+            U_state_ini, STerm_ini,\
+            Therm\
+            );
+
+    //Deriving g2 vector:
+    g2(0) = P_relax*(STerm_ini(0) + C21*g1(0)/dtRelax_ini); 
+    g2(2) = U_relax*(STerm_ini(2) + C21*g1(2)/dtRelax_ini);
+    g2(4) = U_relax*(STerm_ini(4) + C21*g1(4)/dtRelax_ini);
+
+    //Updating the state using the new slopes g1, g2
+    U_state_ini = U_state_sav + A31*g1 + A32*g2;
+
+    //Updating STerm 
+    BN_SourceTerm(tauU, tauP,\
+            U_state_ini, STerm_ini,\
+            Therm\
+            );
+
+    //Deriving g3 vector:
+    g3(0) = P_relax*(STerm_ini(0) + C31*g1(0)/dtRelax_ini +\
+            C32*g2(0)/dtRelax_ini); 
+    g3(2) = U_relax*(STerm_ini(2) + C31*g1(2)/dtRelax_ini +\
+            C32*g2(2)/dtRelax_ini);
+    g3(4) = U_relax*(STerm_ini(4) + C31*g1(4)/dtRelax_ini +\
+            C32*g2(4)/dtRelax_ini);
+
+    //No updates of U for the 4-th sub-step
+
+    //Deriving g4 vector:
+    g4(0) = P_relax*(STerm_ini(0) + C41*g1(0)/dtRelax_ini +\
+            C42*g2(0)/dtRelax_ini + C43*g3(0)/dtRelax_ini); 
+    g4(2) = P_relax*(STerm_ini(2) + C41*g1(2)/dtRelax_ini +\
+            C42*g2(2)/dtRelax_ini + C43*g3(2)/dtRelax_ini); 
+    g4(4) = P_relax*(STerm_ini(4) + C41*g1(4)/dtRelax_ini +\
+            C42*g2(4)/dtRelax_ini + C43*g3(4)/dtRelax_ini); 
 
     //Updating U_state_ini
     //ORDER4
@@ -3420,6 +4471,33 @@ void IsenBNSourceTerm(double tauU, double tauP, double pref, double rhoref,\
     STerm(4) = - (alpha1*alpha2/tauU)*(u2 - u1)*rhoref; 
 }
 
+void BN_SourceTerm(double tauU, double tauP,\
+        Vector5d& U_state, Vector5d& STerm,\
+        ThermoLaw& Therm\
+        ){
+
+    Vector5d W_state = ConsVarToNConsVarLoc(U_state, Therm);
+
+    double alpha1 = W_state(0);
+    double alpha2 = ONE - alpha1;
+    double m1     = U_state(1);
+    double p1     = W_state(1);
+    double u1     = W_state(2);
+    double m2     = U_state(3);
+    double p2     = W_state(3);
+    double u2     = W_state(4);
+
+    double pref   = p1 + p2;
+    double rhoref = m1*m2/(m1+m2);
+
+    //Source term: Alpha 1 
+    STerm(0) = - (alpha1*alpha2/tauP)*(p2 - p1)/pref; 
+    STerm(1) = ZERO; 
+    STerm(2) =  (alpha1*alpha2/tauU)*(u2 - u1)*rhoref; 
+    STerm(3) = ZERO; 
+    STerm(4) = - (alpha1*alpha2/tauU)*(u2 - u1)*rhoref; 
+}
+
 Matrix5d IsenBNSourceTermGradient(double tauU, double tauP, double pref, double rhoref,\
         Vector5d& U_state,\
         ThermoLaw& Therm
@@ -3512,7 +4590,7 @@ void ConsVarFluxUpdateLoc(\
     else if(SchemeTypeCons=="HLLAC"){
 
         Vector4d WaveSpeeds =  WaveSpeedEstimate(W_state_L, W_state_R, Therm);
-        Vector5d Star_UP =  U_P_star_states(W_state_L, W_state_R, WaveSpeeds, Therm);
+        Vector6d Star_UP =  U_P_star_states(W_state_L, W_state_R, WaveSpeeds, Therm);
         ConsFlux = HLLAC_Flux(W_state_L, W_state_R, WaveSpeeds, Star_UP, Therm);
         NConsVarFluxR = NConsVarFluxUpdateLocR(W_state_L, W_state_R, WaveSpeeds, Star_UP, Therm);
         NConsVarFluxL = NConsVarFluxUpdateLocL(W_state_L, W_state_R, WaveSpeeds, Star_UP, Therm);
@@ -3676,6 +4754,7 @@ Vector4d WaveSpeedEstimate(Vector5d& W_state_L, Vector5d& W_state_R,\
 
 }
 
+/*
 Vector5d U_P_star_states(Vector5d& W_state_L, Vector5d& W_state_R,\
                          Vector4d& WaveSpeeds,\
                          ThermoLaw& Therm){
@@ -3730,9 +4809,81 @@ Vector5d U_P_star_states(Vector5d& W_state_L, Vector5d& W_state_R,\
 
     return Star_State;
 }
+*/
+
+Vector6d U_P_star_states(Vector5d& W_state_L, Vector5d& W_state_R,\
+                         Vector4d& WaveSpeeds,\
+                         ThermoLaw& Therm){
+
+    //Local variables
+    double alpha1_L  = W_state_L(0);
+    double alpha1_R  = W_state_R(0);
+    double p1_L      = W_state_L(1); 
+    double p1_R      = W_state_R(1); 
+    double rho1_L    = Density_EOS(1, Therm, p1_L, ZERO); 
+    double rho1_R    = Density_EOS(1, Therm, p1_R, ZERO); 
+    double u1_L      = W_state_L(2); 
+    double u1_R      = W_state_R(2); 
+
+    double alpha2_L  = ONE - alpha1_L;
+    double alpha2_R  = ONE - alpha1_R;
+    double p2_L      = W_state_L(3); 
+    double p2_R      = W_state_R(3); 
+    double rho2_L    = Density_EOS(2, Therm, p2_L, ZERO); 
+    double rho2_R    = Density_EOS(2, Therm, p2_R, ZERO); 
+    double u2_L      = W_state_L(4); 
+    double u2_R      = W_state_R(4);
+
+    double S1_L = WaveSpeeds(0);
+    double S1_R = WaveSpeeds(1);
+    double S2_L = WaveSpeeds(2);
+    double S2_R = WaveSpeeds(3);
+
+    //Function
+    double dAlpha = alpha1_R - alpha1_L;
+    double q1_R   =  rho1_R*(S1_R - u1_R);
+    double q1_L   = -rho1_L*(S1_L - u1_L);
+
+    double q2_R =  rho2_R*(S2_R - u2_R);
+    double q2_L = -rho2_L*(S2_L - u2_L);
+
+    Matrix2d Mat;
+    Mat(0,0) = (alpha1_R/q1_R) + (alpha1_L/q1_L);
+    Mat(0,1) = -dAlpha;
+    Mat(1,0) = +dAlpha;
+    Mat(1,1) = (alpha2_R*q2_R) + (alpha2_L*q2_L);
+
+    Vector2d RHS;
+    RHS(0) = alpha1_L*(u1_L + p1_L/q1_L) - alpha1_R*(u1_R - p1_R/q1_R);
+    RHS(1) = alpha2_L*(u2_L*q2_L + p2_L) - alpha2_R*(-u2_R*q2_R + p2_R);
+
+    //Defining the solver based on a QR decomposition
+    Eigen::ColPivHouseholderQR<Matrix2d> QRsolver(Mat);
+
+    //Deriving  vector:  [p1_star, u2_star]^T
+    Vector2d StarState;
+    StarState = QRsolver.solve(RHS);
+
+    double p1_star = StarState(0);
+    double u2_star = StarState(1);
+    double u1_star_L = u1_L - (p1_star - p1_L)/q1_L;
+    double u1_star_R = u1_R + (p1_star - p1_R)/q1_R;
+    double p2_star_L = p2_L - q2_L*(u2_star - u2_L);
+    double p2_star_R = p2_R + q2_R*(u2_star - u2_R);
+
+    Vector6d Star_State;
+    Star_State(0) = u1_star_L;
+    Star_State(1) = u1_star_R;
+    Star_State(2) = p1_star;
+    Star_State(3) = u2_star;
+    Star_State(4) = p2_star_L;
+    Star_State(5) = p2_star_R;
+
+    return Star_State;
+}
 
 Vector5d HLLAC_Flux(Vector5d& W_state_L, Vector5d& W_state_R,\
-                    Vector4d& WaveSpeeds, Vector5d& Star_UP,\
+                    Vector4d& WaveSpeeds, Vector6d& Star_UP,\
                          ThermoLaw& Therm){
 
     //Local variables
@@ -3763,8 +4914,17 @@ Vector5d HLLAC_Flux(Vector5d& W_state_L, Vector5d& W_state_R,\
     double S2_L = WaveSpeeds(2);
     double S2_R = WaveSpeeds(3);
 
-    double u1_star = Star_UP(0);
-    double u2_star = Star_UP(2);
+    double u1_star_L = Star_UP(0);
+    double u1_star_R = Star_UP(1);
+    double u2_star   = Star_UP(3);
+
+    //FIXME
+    double p1_star     = Star_UP(2);
+    double p2_star_L   = Star_UP(4);
+    double p2_star_R   = Star_UP(5);
+    double rho1_star   = Density_EOS(1, Therm, p1_star, ZERO); 
+    double rho2_star_L = Density_EOS(2, Therm, p2_star_L, ZERO); 
+    double rho2_star_R = Density_EOS(2, Therm, p2_star_R, ZERO); 
 
     double mk   = ZERO;
     double mkuk = ZERO;
@@ -3778,7 +4938,7 @@ Vector5d HLLAC_Flux(Vector5d& W_state_L, Vector5d& W_state_R,\
     if( u2_star >= S1_R || u2_star <= S1_L){
 
         cout<<"Inside HLLAC Flux: Supersonic configuration!"<<endl;
-        exit(EXIT_FAILURE);
+        //exit(EXIT_FAILURE);
     }
 
     //Phase1
@@ -3789,15 +4949,19 @@ Vector5d HLLAC_Flux(Vector5d& W_state_L, Vector5d& W_state_R,\
     }
     else if (ZERO < u2_star){
 
-        mk = m1_L*(u1_L - S1_L)/(u1_star - S1_L);
-        mkuk = mk*u1_star;
+        //FIXME
+        //mk = m1_L*(u1_L - S1_L)/(u1_star_L - S1_L);
+        mk = alpha1_L*rho1_star;
+        mkuk = mk*u1_star_L;
         Flux(1) = Flux_L(1) + S1_L*(mk - m1_L);
         Flux(2) = Flux_L(2) + S1_L*(mkuk - m1_L*u1_L);
     }
     else if (ZERO < S1_R){
 
-        mk = m1_R*(u1_R - S1_R)/(u1_star - S1_R);
-        mkuk = mk*u1_star;
+        //FIXME
+        //mk = m1_R*(u1_R - S1_R)/(u1_star_R - S1_R);
+        mk = alpha1_R*rho1_star;
+        mkuk = mk*u1_star_R;
         Flux(1) = Flux_R(1) + S1_R*(mk - m1_R);
         Flux(2) = Flux_R(2) + S1_R*(mkuk - m1_R*u1_R);
     }
@@ -3814,14 +4978,18 @@ Vector5d HLLAC_Flux(Vector5d& W_state_L, Vector5d& W_state_R,\
     }
     else if (ZERO < u2_star){
 
-        mk = m2_L*(u2_L - S2_L)/(u2_star - S2_L);
+        //FIXME
+        //mk = m2_L*(u2_L - S2_L)/(u2_star - S2_L);
+        mk   = alpha2_L*rho2_star_L;
         mkuk = mk*u2_star;
         Flux(3) = Flux_L(3) + S2_L*(mk - m2_L);
         Flux(4) = Flux_L(4) + S2_L*(mkuk - m2_L*u2_L);
     }
     else if (ZERO < S2_R){
 
-        mk = m2_R*(u2_R - S2_R)/(u2_star - S2_R);
+        //FIXME
+        //mk = m2_R*(u2_R - S2_R)/(u2_star - S2_R);
+        mk   = alpha2_R*rho2_star_R; 
         mkuk = mk*u2_star;
         Flux(3) = Flux_R(3) + S2_R*(mk - m2_R);
         Flux(4) = Flux_R(4) + S2_R*(mkuk - m2_R*u2_R);
@@ -3838,7 +5006,7 @@ Vector5d HLLAC_Flux(Vector5d& W_state_L, Vector5d& W_state_R,\
 
 Vector5d NConsVarFluxUpdateLocR(\
         Vector5d& W_state_L, Vector5d& W_state_R,\
-        Vector4d& WaveSpeeds, Vector5d& Star_UP,\
+        Vector4d& WaveSpeeds, Vector6d& Star_UP,\
         ThermoLaw& Therm\
         ){
 
@@ -3849,9 +5017,9 @@ Vector5d NConsVarFluxUpdateLocR(\
     double alpha2_L  = ONE - alpha1_L;
     double alpha2_R  = ONE - alpha1_R;
 
-    double u2_star   = Star_UP(2);
-    double p2_star_L = Star_UP(3);
-    double p2_star_R = Star_UP(4);
+    double u2_star   = Star_UP(3);
+    double p2_star_L = Star_UP(4);
+    double p2_star_R = Star_UP(5);
 
     //Function
     Vector5d NConsVarFluxR = VectorXd::Zero(5);
@@ -3870,7 +5038,7 @@ Vector5d NConsVarFluxUpdateLocR(\
 
 Vector5d NConsVarFluxUpdateLocL(\
         Vector5d& W_state_L, Vector5d& W_state_R,\
-        Vector4d& WaveSpeeds, Vector5d& Star_UP,\
+        Vector4d& WaveSpeeds, Vector6d& Star_UP,\
         ThermoLaw& Therm\
         ){
 
@@ -3881,9 +5049,9 @@ Vector5d NConsVarFluxUpdateLocL(\
     double alpha2_L  = ONE - alpha1_L;
     double alpha2_R  = ONE - alpha1_R;
 
-    double u2_star   = Star_UP(2);
-    double p2_star_L = Star_UP(3);
-    double p2_star_R = Star_UP(4);
+    double u2_star   = Star_UP(3);
+    double p2_star_L = Star_UP(4);
+    double p2_star_R = Star_UP(5);
 
     //Function
     Vector5d NConsVarFluxL = VectorXd::Zero(5);

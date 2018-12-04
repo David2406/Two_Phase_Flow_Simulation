@@ -31,7 +31,9 @@ typedef Eigen::SparseMatrix<double> SpMat;
 
 //Defining a type for matrix double 4 by 4
 typedef Eigen::Matrix<double, 4, 4> Matrix4d;
+typedef Eigen::Matrix<double, 2, 2> Matrix2d;
 typedef Eigen::Matrix<double, 4, 1> Vector4d;
+typedef Eigen::Matrix<double, 6, 1> Vector6d;
 typedef Eigen::Matrix<double, 2, 1> Vector2d;
 
 //Defining a type for triplets used for acoustic implicitation
@@ -140,7 +142,15 @@ class Solver_Isen
 
         //Resolution of the time boundary layer related to the relaxation processes
         void BoundaryLayerUpdateFracStep(Sol_Isen& sol, Mesh& mesh, string MeshTag,\
-                double& dtRelax, double& dtRelax_estim, string VariableType);
+                double& dtRelax, string VariableType);
+
+        //Resolution of the time boundary layer related to the Velocity relaxation processes
+        void BoundaryLayerUpdateFracStepVelocity(Sol_Isen& sol, Mesh& mesh, string MeshTag,\
+                double& dtRelax, string VariableType);
+
+        //Resolution of the time boundary layer related to the Pressure relaxation processes
+        void BoundaryLayerUpdateFracStepPressure(Sol_Isen& sol, Mesh& mesh, string MeshTag,\
+                double& dtRelax, string VariableType);
 
         //Update the pure relaxation solution from t to t + *dtConv_
         void BoundaryLayerFracStep(Sol_Isen& sol, Mesh& mesh);
@@ -260,7 +270,7 @@ void BoundaryLayerResolutionLocalConsVar(\
 
 //Returns the non-conservative flux à la Ambroso Galié Chalons
 Vector5d NConsFluxLoc(Vector5d& W_state_L, Vector5d& W_state_R,\
-        Vector4d& WaveSpeeds, Vector5d& Star_UP, string SchemeTypeNCons,\
+        Vector4d& WaveSpeeds, Vector6d& Star_UP, string SchemeTypeNCons,\
         ThermoLaw& Therm\
         );
 
@@ -323,6 +333,82 @@ void BN_ImplicitEuler(\
         double& dtRelax_ini\
         );
 
+//Implicit time integration of order 1 method for the Velocity Baer-Nunziato 
+void BN_ImplicitVelocity(\
+        Vector5d& U_state_ini,\
+        double tauU, double& dtRelax_ini\
+        );
+
+//Implicit time integration of order 1 method for the Pressure Baer-Nunziato 
+void BN_ImplicitPressure(\
+        Vector5d& U_state_ini, ThermoLaw& Therm,\
+        double tauP, double& dtRelax_ini\
+        );
+
+//Simultaneous implicit time integration of order 1 for the Velocity-Pressure Baer-Nunziato
+void BN_ImplicitVelocityPressure(\
+        Vector5d& U_state_ini, ThermoLaw& Therm,\
+        double tauU, double tauP, double& dtRelax_ini\
+        );
+
+//Returns the function related to the volume fraction relaxation
+double  AlphaRelaxFunction(\
+        double alpha1,\
+        Vector5d& U_state_ini,\
+        double tauP, double dtRelax_ini,\
+        ThermoLaw& Therm\
+        );
+
+double  AlphaRelaxFunctionBS(\
+        double& alpha1,\
+        Vector5d& U_state_ini,\
+        double tauP, double dtRelax_ini,\
+        double SpaceStep,\
+        ThermoLaw& Therm,\
+        double alpha1_mass_n\
+        );
+
+//Returns the alpha1 involved in the volume fraction equation for the implicit Euler
+//isentropic system
+double AlphaDichotomy(\
+        Vector5d& U_state_ini,\
+        double tauP, double dtRelax_ini,\
+        ThermoLaw& Therm,\
+        double& alpha1_inf, double& alpha1_sup,\
+        double& eps);
+
+double AlphaDichotomyBS(\
+        Vector5d& U_state_ini,\
+        double tauP, double dtRelax_ini,\
+        double SpaceStep,\
+        ThermoLaw& Therm,\
+        double alpha1_inf, double alpha1_sup,\
+        double alpha1_mass_n,\
+        double eps);
+
+//Update the volume fraction of U_state_ini based on the AlphaDichotomy procedure
+void BN_Pressure_Dichotomy(\
+        Vector5d& U_state_ini,\
+        double tauP, double dtRelax_ini,\
+        ThermoLaw& Therm,\
+        double& eps);
+
+void BN_Pressure_DichotomyBS(\
+        Vector5d& U_state_ini,\
+        double tauP, double dtRelax_ini,\
+        double SpaceStep,\
+        ThermoLaw& Therm,\
+        double alpha1_mass_n,\
+        double& eps);
+
+//Simultaneous implicit time integration of order 4 for the Velocity-Pressure Baer-Nunziato
+void BN_RosenBrockFourthOrder(\
+        double tauP, double tauU,\
+        ThermoLaw& Therm,\
+        Vector5d& U_state_ini,\
+        double& dtRelax_ini\
+        );
+
 //Explicit Runge-Kutta of order 4 method
 void RungeKuttaFourthOrder(\
         Matrix5d& TauMat,\
@@ -344,10 +430,15 @@ Vector5d LinearSpringGradient(Matrix5d& TauMat, Vector5d& U_state, Vector5d& U_e
 void NonLinearSpring(Matrix5d& TauMat, Vector5d& U_state, Vector5d& U_eq, Vector5d& STerm,\
         Matrix5d& EigenVectorBasis, Matrix5d& EigenVectorBasisInv);
 
-//Derive the real source term of the isentropic BN system
+//Derive the real source term of the isentropic BN system with frozen Pressure and Mass
 void IsenBNSourceTerm(double tauU, double tauP, double pref, double rhoref,\
         Vector5d& U_state, Vector5d& STerm,\
         ThermoLaw& Therm
+        );
+//Derive the real source term of the isentropic BN system
+void BN_SourceTerm(double tauU, double tauP,\
+        Vector5d& U_state, Vector5d& STerm,\
+        ThermoLaw& Therm\
         );
 
 //Derive the real source term gradient of the isentropic BN system
@@ -394,28 +485,28 @@ double SpectralRadiusRusanov(\
 Vector4d WaveSpeedEstimate(Vector5d& W_state_L, Vector5d& W_state_R,\
                 ThermoLaw& Therm);
 
-//Return [u1_star, p1_star, u2_star, p2_star_L, p2_star_R]
+//Return [u1_star_L, u1_star_R, p1_star, u2_star, p2_star_L, p2_star_R]
 //solutions of the coupling wave with simplified Riemann invariants
-Vector5d U_P_star_states(Vector5d& W_state_L, Vector5d& W_state_R,\
+Vector6d U_P_star_states(Vector5d& W_state_L, Vector5d& W_state_R,\
                          Vector4d& WaveSpeeds,\
                          ThermoLaw& Therm);
 
 //Returns the conservative flux related to HLLAC scheme
 Vector5d HLLAC_Flux(Vector5d& W_state_L, Vector5d& W_state_R,\
-                    Vector4d& WaveSpeeds, Vector5d& Star_UP,\
+                    Vector4d& WaveSpeeds, Vector6d& Star_UP,\
                          ThermoLaw& Therm);
 
 //Fills the vector NConsVarFluxR with the non-conservative F^+ contribution
 Vector5d NConsVarFluxUpdateLocR(\
         Vector5d& W_state_L, Vector5d& W_state_R,\
-        Vector4d& WaveSpeeds, Vector5d& Star_UP,\
+        Vector4d& WaveSpeeds, Vector6d& Star_UP,\
         ThermoLaw& Therm\
         );
 
 //Fills the vector NConsVarFluxL with the non-conservative F^- contribution
 Vector5d NConsVarFluxUpdateLocL(\
         Vector5d& W_state_L, Vector5d& W_state_R,\
-        Vector4d& WaveSpeeds, Vector5d& Star_UP,\
+        Vector4d& WaveSpeeds, Vector6d& Star_UP,\
         ThermoLaw& Therm\
         );
 

@@ -136,7 +136,7 @@ Sol_Isen::Sol_Isen(Mesh& M,\
                mu_3,
                mu_4;
 
-    Vector5d U_state_ref = NConsVarToConsVarLoc(W_ref_, Therm);
+    //Vector5d U_state_ref = NConsVarToConsVarLoc(W_ref_, Therm);
 
     Vector5d One;
     One<<ONE,
@@ -341,10 +341,10 @@ void Sol_Isen::ConsVarInit(Vector5d& InitR, Vector5d& InitL,\
     double x_0 = (*this).x_0_;
     double Ncols = InitR.rows();
 
-    double tauP = tauRelax(0);
-    double tauU = tauRelax(1);
+    //double tauP = tauRelax(0);
+    //double tauU = tauRelax(1);
 
-    double du, dp;
+    //double du, dp;
 
     //local variables
     double alpha1, rho1, u1, p1; 
@@ -387,8 +387,8 @@ void Sol_Isen::ConsVarInit(Vector5d& InitR, Vector5d& InitL,\
         m1   = alpha1*rho1;
         m2   = alpha2*rho2;
 
-        dp = p2 - p1;
-        du = u2 - u1;
+        //dp = p2 - p1;
+        //du = u2 - u1;
 
         //Conservative Vector Filled
         ((*this).ConsVar_)(i,0) = alpha1;
