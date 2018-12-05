@@ -1,0 +1,29 @@
+#!/bin/bash
+if [ ! -d "Output" ]; then
+          mkdir Output
+else 
+
+  cd Output/
+  rm *.dat
+  rm *.vtk
+  cd ..
+
+fi
+
+rm *.dat
+./Simulation.exe
+
+cd Report/
+
+pdflatex Simulation_Report.tex
+for i in *.aux
+do
+if [ "$i" == "Main.aux" ] ;then
+continue;
+fi
+bibtex ${i%.*}
+done
+pdflatex Simulation_Report.tex
+pdflatex Simulation_Report.tex
+
+evince Simulation_Report.pdf &
