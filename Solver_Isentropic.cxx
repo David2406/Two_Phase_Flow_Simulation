@@ -4340,7 +4340,7 @@ void Convergence_Curve(\
 
 	    int Ncells=CellsTab(i);
 
-	    cout<<"Convergence curve: Ncells= "<<Ncells<<endl;
+	    cout<<"Number of cells in the 1-D computational domain: "<<Ncells<<endl;
 	    //Mesh building
 	    Mesh mesh_try(Length, Ncells, NGhostCells);
 
