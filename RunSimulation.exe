@@ -1,4 +1,7 @@
 #!/bin/bash
+chmod +x RunSimulation.exe
+make
+
 if [ ! -d "Output" ]; then
           mkdir Output
 else 
