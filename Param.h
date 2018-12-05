@@ -44,8 +44,11 @@ extern double Inf;
 
 //Physical Parameters
 
-extern double Mach_ref; //Involved in eps0sq Update: max(Mach_ref, min(MachMax_,1))
-extern double PiSG;    //Stiffened Gas reference pressure
+//Involved in eps0sq Update: max(Mach_ref, min(MachMax_,1))
+extern double Mach_ref;
+
+//Stiffened Gas reference pressure
+extern double PiSG;    
 
 
 #endif

@@ -161,7 +161,7 @@ VectorXd  Internal_Energy_EOS_Tab(\
     }
     else if (ThermoLawType=="SG"){ //Stiffened Gas Law
 
-        InternalEnergyTab=(ONE/(Gamma-ONE))*(p+(Gamma*PiSG)*VectorXd::Constant(p.rows(),ONE)).cwiseQuotient(rho);
+     InternalEnergyTab=(ONE/(Gamma-ONE))*(p+(Gamma*PiSG)*VectorXd::Constant(p.rows(),ONE)).cwiseQuotient(rho);
 
     }
     else if (ThermoLawType=="BAR"){ //Isentropic EOS

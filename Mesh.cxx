@@ -60,21 +60,20 @@ Mesh::Mesh( double Length, int Ncells, int NGhostCells)
 		CellIndex_(i,2)=i;
 	    }
 
-	    CellCoordsTab_(i,0)=i; //Cell id is "i", Rq: first id is "0" it is
-	                         //a ghost cell
+        //Cell id is "i", Rq: first id is "0" it is a ghost cell
+	    CellCoordsTab_(i,0)=i; 
 	    CellCoordsTab_(i,1)=(i*ONE-ONE_OVER_TWO)*SpaceStep_; // x coords
 	    CellCoordsTab_(i,2)=ZERO; // y coords
 	    CellCoordsTab_(i,3)=ZERO; // z coords
 
 	}
 
-	LeftBCface_=0; // to treat left Boundary Condition more easily
-	RightBCface_=Nfaces_-1;// to treat right Boundary Condition more easily
+    //To treat left Boundary Condition more easily
+	LeftBCface_=0;
 
-	/*cout<<"Inside Mesh: CellCoordsTab: "<<endl;
-	cout<<endl;
-	cout<<CellCoordsTab_<<endl;
-	cout<<"Inside Mesh: SpaceStep: "<<SpaceStep_<<endl;*/
+    //To treat right Boundary Condition more easily
+	RightBCface_=Nfaces_-1;
+
 }
 
 //methods:

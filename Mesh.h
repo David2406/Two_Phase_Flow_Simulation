@@ -23,16 +23,15 @@ class Mesh
 	//Dynamic matrix, each row stores the face id and the left cell neighbor row id 
 	//(in CellCoordsTab_), the right cell neighbor row id (in CellCoordsTab_)
 	//and the x_face coordinate
-        Eigen::MatrixXd FaceIndex_;    
-        Eigen::MatrixXd FaceIndexDual_;    
+    Eigen::MatrixXd FaceIndex_;    
+    Eigen::MatrixXd FaceIndexDual_;    
 			
 	//Dynamic matrix, each row stores 
 	//then the left face id , the right face id , for the left 
 	//ghost cell the left face id doesn't exist so it takes 
 	//the 'NoIndex' value. Same thing for the right ghost cell
-        Eigen::MatrixXd CellIndex_;     
+    Eigen::MatrixXd CellIndex_;     
                                   
-				
 	//constructor:
 	Mesh(double Length, int Ncells, int NGhostcells); 
 
@@ -45,11 +44,13 @@ class Mesh
 	int    Get_LeftBCface();
 	int    Get_RightBCface();
 
-	int   Get_Left_Neighbor(int face_id); //return the left neighbor id of the face:
-	                                      //face_id
-	int   Get_Right_Neighbor(int face_id);//return the right neighbor id of the face:
-	                                      //face_id
-	int   Get_CoordsTab(int cell_id);//returns the row number in CellCoordsTab_ for a cell whose cell id is 'cell_id'
+    //return the left neighbor id of the face:  face_id  
+    int   Get_Left_Neighbor(int face_id); 
+    //return the right neighbor id of the face: face_id
+	int   Get_Right_Neighbor(int face_id);
+	                                
+    //returns the row number in CellCoordsTab_ for a cell whose cell id is 'cell_id'
+	int   Get_CoordsTab(int cell_id);
 
 };
 

@@ -1,12 +1,8 @@
 #include <iostream>
 #include "Mesh.h"
-#include "Sol.h"
 #include "Sol_Isentropic.h"
 #include "Solver_Isentropic.h"
 #include "ThermoLaw.h"
-#include "Stability.h"
-//#include "Solver.h"
-//#include "Stability.h"
 #include <Eigen/SparseLU>
 #include <limits> //file reading
 #include <vector> //storing the different strings of Mach numbers
@@ -22,57 +18,7 @@ int main(int argc, char* argv[])
 	cout.precision(COUT_PRECISION);
 	cout<<std::scientific;
 
-    /*
-    double psat = 5.e6;
-    double rhovapsat = 25.3512;
-    double rholiqsat = 777.369;
-    double gamvapsat = 1.71206;
-    double gamliqsat = 1.61417;
-    double Cvapsat = gamvapsat*psat;
-    double Cliqsat = gamliqsat*psat;
-    double cvap = 498.043;
-    double cliq = 1087.81;
-    double Cvap = rhovapsat*cvap*cvap;
-    double Cliq = rholiqsat*cliq*cliq;
-
-    string FileName = "Celerity_Curves";
-
-    ofstream file(FileName.c_str(), ios::out);  //file flux declaration and file opening
-
-    file<<"Alpha1"<<" "<<"Cwood_sat"<<" "<<"Cstar_sat"<<" "<<"Cwood"<<" "<<"Cstar"<<" "\
-        <<"Cfroz"<<endl;
-    double Cwood_sat  = ZERO;
-    double Cstar_sat  = ZERO;
-    double Cfroz      = ZERO;
-    double Cwood      = ZERO;
-    double Cstar      = ZERO;
-    double m          = ZERO;
-    double m1         = ZERO;
-    double alpha2     = ZERO;
-
-    for (double alpha1=ZERO; alpha1<=1.001; alpha1+=0.001){
-
-        alpha2 = ONE - alpha1;
-        m = alpha1*rhovapsat + alpha2*rholiqsat;
-        m1 = alpha1*rhovapsat/m;
-
-        Cwood_sat = sqrt((ONE/m)*(Cvapsat*Cliqsat/(alpha1*Cliqsat+alpha2*Cvapsat)));
-        Cstar_sat = sqrt(alpha2*(Cvapsat/rhovapsat) + alpha1*(Cliqsat/rholiqsat));
-
-        Cwood = sqrt((ONE/m)*(Cvap*Cliq/(alpha1*Cliq+alpha2*Cvap)));
-        Cstar = sqrt(alpha2*(Cvap/rhovapsat) + alpha1*(Cliq/rholiqsat));
-        Cfroz = sqrt((alpha1/m)*Cvap + (alpha2/m)*Cliq);
-
-        file<<alpha1<<" "<<Cwood_sat<<" "<<Cstar_sat<<" "<<Cwood<<" "<<Cstar<<" "\
-            <<Cfroz<<endl;
-
-    }
-
-    exit(EXIT_FAILURE);
-    */
-    
-
-    /* FILE READING PARAMETERS */
+    /* READING PARAMETER FILE */
     string file_name="BN_Simulation.input";
     char input_comment='%';
     char character;
@@ -142,7 +88,7 @@ int main(int argc, char* argv[])
     int nbNcells_cases;
     Array<int, Eigen::Dynamic, 1> CellsTab;
     
-    //Double Riemann Problem
+    //Riemann Problem parameters
     int Nbr_Areas;
     double x0;
 
@@ -150,9 +96,10 @@ int main(int argc, char* argv[])
     int print_freq;
     string FileOutputFormat;
 
-    ifstream fichier( file_name.c_str(), ios::in);  // on ouvre le fichier en lecture
+    // file is opened in reading mode
+    ifstream fichier( file_name.c_str(), ios::in);  
 
-    if(fichier)  // si l'ouverture a réussi
+    if(fichier)  
     { 
         int nblines(0);
         string line;
@@ -190,7 +137,6 @@ int main(int argc, char* argv[])
                     getline(fichier,key_str_info,
                             end_of_line);
                     Simulation_Name+=key_str_info;
-                    //cout<<"Simulation_Name= "<<Simulation_Name<<endl;
 
                 }
                 else if(key_word=="SOLUTION_TYPE"){
@@ -213,7 +159,6 @@ int main(int argc, char* argv[])
 
                     getline(fichier,key_str_info, ' ');
                     ThermoLawType1=key_str_info;
-                    //cout<<"ThermoLawType: "<<ThermoLawType<<endl;
                     fichier.ignore(numeric_limits<int>::max(),
                             delimiter);
                     getline(fichier,key_str_info,
@@ -238,7 +183,6 @@ int main(int argc, char* argv[])
 
                     getline(fichier,key_str_info, ' ');
                     ThermoLawType2=key_str_info;
-                    //cout<<"ThermoLawType: "<<ThermoLawType<<endl;
                     fichier.ignore(numeric_limits<int>::max(),
                             delimiter);
                     getline(fichier,key_str_info,
@@ -428,7 +372,6 @@ int main(int argc, char* argv[])
                     if(CFL_ramp==true){
 
                         CFL_ramp_range=stoi(key_str_info);
-                        //cout<<"CFL_ramp_range: "<<CFL_ramp_range<<endl;
                     }
                 }
                 else if(key_word=="CFL_CONV"){
@@ -513,13 +456,15 @@ int main(int argc, char* argv[])
             }
         }
 
-        fichier.close();  // on ferme le fichier
+        fichier.close();  
     }
-    else{cerr << "Impossible d'ouvrir le fichier !" << endl;}
+    else{cerr << "Impossible to open the file !" << endl;}
 
     cout<<endl;
 
+    /**********************/
 	/***** SIMULATION *****/
+    /**********************/
 
     //EOS parameters
     ThermoLaw therm_try(\
@@ -600,47 +545,11 @@ int main(int argc, char* argv[])
 
     }
 
-/*
-
-    Vector5d W_state_L = InitL;
-    Vector5d W_state_R = InitR;
-    Vector5d W_state_avr = NConsVarAveraged(W_state_L, W_state_R, ONE_OVER_TWO);
-    Vector5d V_state_L = NConsVarToEqRelaxLoc(W_state_L, therm_try);
-    Vector5d V_state_R = NConsVarToEqRelaxLoc(W_state_R, therm_try);
-    Vector5d H_state = NConsVarAveraged(V_state_L, V_state_R, ONE_OVER_TWO);
-
-    double tauMin  = min(tauRelax(0), tauRelax(1));
-    double tauP = tauRelax(0);
-    double tauU = tauRelax(1);
-    double etaP = tauMin/tauP;
-    double etaU = tauMin/tauU;
-
-    double SpaceStep = 1e-2;
-
-    double dtRelax = LocalCourant_LSTEq(W_state_avr,\
-        therm_try, pRef, mRef,\
-        tauMin, etaP, etaU,\
-        SpaceStep,\
-        CourantBL);
-
-    SourceTermResolutionLocalNewton(\
-            H_state,\
-            therm_try, pRef, mRef,\
-            etaP, etaU,\
-            CourantBL, tauMin, NRelax\
-            );
-
-    exit(EXIT_FAILURE);
-
-    BoundaryLayerResolutionLocal(\
-        H_state, W_state_L, W_state_R,\
-        therm_try, pRef, mRef,\
-        etaP, etaU,\
-        dtRelax, tauMin, NRelax,\
-        SpaceStep\
-        );
-
-    */
+    /* Convergence_Curve creates the mandatory objects for the simulation: */
+    // -a Mesh              object the computational domain is 1D and structured,
+    // -a ThermoLaw         object storing the functions and parameters of the fluid Equation of State,
+    // -a Sol_Isentropic    object which shelters the shape of the computed solution at any time,
+    // -a Solver_Isentropic object which updates the solution for each time step using a given numerical scheme 
 
     Convergence_Curve(\
         Length, NGhostCells, \
@@ -663,286 +572,9 @@ int main(int argc, char* argv[])
         CellsTab, \
         FileOutputFormat, Simulation_Name, print_freq);
 
-    // */
-
-    /**********************************************************************************/
-    /*****************  ANALYTICAL SOLUTION RHS OF THE H-DYNAMICS ****************/
-    /**********************************************************************************/
-
-    /*
-    Vector5d W_state = sol_try.NConsVar_.row(0).transpose();
-
-    Matrix5d LSTEq = LinearizedSourceTermsEq(W_state,\
-            sol_try.SolTherm_,\
-            pRef, mRef,\
-            etaP, etaU\
-            );
-
-    cout<<"Inside main LinearizedSourceTermEq"<<endl;
-    cout<<LSTEq<<endl<<endl;
-
-    Matrix5d LJEqRel = LinearizedJacobianEqRelax(W_state,\
-            sol_try.SolTherm_\
-            );
-
-    cout<<"Inside main LinearizedJacobianEqRelax"<<endl;
-    cout<<LJEqRel<<endl<<endl;
-
-    //Plotting the relaxation dynamics:
-    Vector5d LST_EqODE;
-    double alpha1, U, P, du, dp;
-
-    string filename = "ODE_LinearizedSourceTermEq.dat";
-    ofstream file((filename).c_str(), ios::out);
-    if(file){
-
-        file<<"Time"<<" "<<"alpha1"<<" "<<"U"<<" "<<"P"<<" "<<"du"<<" "<<"dp"<<endl;
-
-        for (double t=ZERO; t<=30*tauMin; t+=tauMin/HUNDRED){
-
-            LST_EqODE = LinearizedSourceTermEqODE(\
-                    W_state_avr, W_state_ini,\
-                    sol_try.SolTherm_, pRef, mRef,\
-                    tauMin, etaP, etaU, t\
-                    );
-
-            alpha1  = LST_EqODE(0);
-            U       = LST_EqODE(1);
-            P       = LST_EqODE(2);
-            du      = LST_EqODE(3);
-            dp      = LST_EqODE(4);
-
-            file<<std::setprecision(COUT_PRECISION)<<std::scientific\
-              <<t<<" "<<alpha1<<" "<<U<<" "<<P<<" "<<du<<" "<<dp<<endl;
-             }
-    }
-    else{cerr << "Linearized Source Term Equilibrium ODE, Can't open file !" << endl;}
-
-    */
-
-    /**********************************************************************************/
-    /*****************  BOUNDARY LAYER RESOLUTION ****************/
-    /**********************************************************************************/
-
-    /*
-    Vector5d W_state_L   = InitL;
-    Vector5d W_state_R   = InitR;
-    W_state_avr = NConsVarAveraged(\
-        W_state_L, W_state_R,\
-        ONE_OVER_TWO);
-
-    Vector5d H_state = NConsVarToEqRelax(W_state_avr,\
-        sol_try.SolTherm_\
-        );
-
-    BoundaryLayerResolutionLocal(\
-            H_state, W_state_L, W_state_R,\
-            sol_try.SolTherm_, pRef, mRef,\
-            etaP, etaU,\
-            dtRelax, tauMin, NRelax,\
-            SpaceStep);
-    */
-
-
-
-    /**********************************************************************************/
-    /*****************  STABILITY CONVECTION SOURCE BN: U-P RELAXATION ****************/
-    /**********************************************************************************/
-
-    /*
-
-    //Equilibrium definition
-
-    double alpha0_eq = 0.8;
-    double alpha1_eq = 0.8;
-    double alpha2_eq = 0.2;
-
-    double p0_eq = 2e6; //(Pa)
-    double s1_eq = 2.44e3; //(J.kg-1.K-1)
-    double s2_eq = 6.32e3; //(J.kg-1.K-1)
-
-    double rho1_eq = 8.46e2; //(kg.m-3)
-    double rho2_eq = 1.20e1; //(kg.m-3)
-
-    double u0_eq   = 1.e0;   //(m.s-1)
-    //double c1_eq   = 1.50e3; //(m.s-1)
-    double c1_eq   = 3.50e2; //(m.s-1)
-    double c2_eq   = 3.00e2; //(m.s-1)
-
-    //Thermodynamics parameters
-    ThermoLawType1 = "SG";
-    ThermoLawType2 = "SG";
-    Gamma1         = 1.4;
-    //Gamma2         = 7.5;
-    Gamma2         = 1.4;
-    PiSG1          = ZERO;
-    //PiSG2          = 3e8;
-    PiSG2          = ZERO;
-
-    ThermoLaw therm_try_UP_relax(\
-            ThermoLawType1, ThermoLawType2,\
-            Gamma1, Gamma2,\
-            PiSG1,  PiSG2,\
-            kBAR1,  kBAR2\
-            );
-
-    //Space-step and Fourier mode parameters
-    double dx = 1e-3; //(m)
-    double k  = ONE/(TWO*dx); //(m-1)
-
-    //Time-step and relaxation time parameters
-    double dt_tauPbar = ONE_OVER_TWO;
-    double dt_Big     = dx/max(c1_eq, c2_eq); 
-    double tauPbar    = 1.e-12; //(s)
-    double tauPbar_tauU = 1.e-3;
-
-    double K_integrator = 3.;
-
-    Row4cd Fourier_R1_UP_relax = Fourier_R1_BN_UP(\
-            alpha0_eq, u0_eq, p0_eq,\
-            rho1_eq, rho2_eq, s1_eq, s2_eq,\
-            c1_eq, c2_eq,\
-            therm_try_UP_relax,\
-            dt_tauPbar, tauPbar, tauPbar_tauU,\
-            k, dx);
-
-    Row4cd Fourier_W1_UP_relax = Fourier_W1_BN_UP(\
-            alpha0_eq, u0_eq, p0_eq,\
-            rho1_eq, rho2_eq, s1_eq, s2_eq,\
-            c1_eq, c2_eq,\
-            therm_try_UP_relax,\
-            dt_tauPbar, tauPbar, tauPbar_tauU,\
-            k, dx);
-
-    Row4cd Fourier_R2_UP_relax = Fourier_R2_BN_UP(\
-            alpha0_eq, u0_eq, p0_eq,\
-            rho1_eq, rho2_eq, s1_eq, s2_eq,\
-            c1_eq, c2_eq,\
-            therm_try_UP_relax,\
-            dt_tauPbar, tauPbar, tauPbar_tauU,\
-            k, dx);
-
-    Row4cd Fourier_W2_UP_relax = Fourier_W2_BN_UP(\
-            alpha0_eq, u0_eq, p0_eq,\
-            rho1_eq, rho2_eq, s1_eq, s2_eq,\
-            c1_eq, c2_eq,\
-            therm_try_UP_relax,\
-            dt_tauPbar, tauPbar, tauPbar_tauU,\
-            k, dx);
-
-    cout<<"Inside main, Fourier_R1_UP_relax: "<<endl;
-    cout<<Fourier_R1_UP_relax<<endl<<endl;
-    cout<<"Inside main, Fourier_W1_UP_relax: "<<endl;
-    cout<<Fourier_W1_UP_relax<<endl<<endl;
-    cout<<"Inside main, Fourier_R2_UP_relax: "<<endl;
-    cout<<Fourier_R2_UP_relax<<endl<<endl;
-    cout<<"Inside main, Fourier_W2_UP_relax: "<<endl;
-    cout<<Fourier_W2_UP_relax<<endl<<endl;
-
-    Mat4cd Fourier_Matrix_BN_UP_relax = Fourier_Matrix_BN_UP(\
-            alpha0_eq, u0_eq, p0_eq,\
-            rho1_eq, rho2_eq, s1_eq, s2_eq,\
-            c1_eq, c2_eq,\
-            therm_try_UP_relax,\
-            dt_tauPbar, tauPbar, tauPbar_tauU,\
-            k, dx);
-
-    cout<<"Inside main, Fourier_Matrix_BN_UP_relax: "<<endl;
-    cout<<Fourier_Matrix_BN_UP_relax<<endl<<endl;
-
-    int dk = 25;
-
-    Fourier_Matrix_BN_UP_EigenValues(\
-            alpha0_eq, u0_eq, p0_eq,\
-            rho1_eq, rho2_eq, s1_eq, s2_eq,\
-            c1_eq, c2_eq,\
-            therm_try_UP_relax,\
-            dt_tauPbar, tauPbar, tauPbar_tauU,\
-            dt_Big, K_integrator,\
-            dk, dx);
-
-    Matrix_BN_UP_EigenValues(\
-            u0_eq, p0_eq,\
-            alpha1_eq, alpha2_eq,\
-            rho1_eq, rho2_eq, s1_eq, s2_eq,\
-            c1_eq, c2_eq,\
-            therm_try_UP_relax,\
-            tauPbar_tauU);
-
-
-    string filename = "Wood_Velocity.dat";
-
-    rho1_eq = 1.20e1; //(kg.m-3)
-    rho2_eq = 8.46e2; //(kg.m-3)
-
-    c1_eq   = 3.50e2; //(m.s-1)
-    c2_eq   = 1.00e3; //(m.s-1)
-
-    double C1 = rho1_eq*pow(c1_eq,TWO);
-    double C2 = rho2_eq*pow(c2_eq,TWO);
-    double c1sq = pow(c1_eq,TWO);
-    double c2sq = pow(c2_eq,TWO);
-
-    double M      = ZERO;
-    double Tau    = ZERO;
-    double Y      = ZERO;
-    double Cwood  = ZERO; 
-    double Ctilde = ZERO; 
-    double Cstar  = ZERO; 
-
-    //Plotting the Wood curve:
-
-    ofstream file((filename).c_str(), ios::out);
-    if(file){
-
-        file<<"Alpha_1"<<" "<<"Cwood"<<" "<<"Ctilde"<<" "<<"Cstar"<<endl;
-
-        for (double alpha1=ZERO; alpha1<=ONE; alpha1+=0.005){
-
-            M      = alpha1*rho1_eq + (ONE-alpha1)*rho2_eq;
-            Y      = (alpha1*rho1_eq)/M;
-            Tau    = (ONE-alpha1)/rho1_eq + alpha1/rho2_eq;
-            Cwood  = sqrt( (ONE/M) * (C1*C2 / ((ONE-alpha1)*C1 + alpha1*C2)) );  
-            Ctilde = sqrt( c1sq*c2sq / ((ONE-alpha1)*c1sq + alpha1*c2sq));
-            Cstar  = sqrt(Tau*((ONE-Y)*C1 + Y*C2));
-
-            file<<std::setprecision(COUT_PRECISION)<<std::scientific\
-              <<alpha1<<" "<<Cwood<<" "<<Ctilde<<" "<<Cstar<<endl;
-             }
-    }
-    else{cerr << "Wood_Velocity, Can't open file !" << endl;}
-
-    //Plotting the modified characteristic curves when linear source term:
-
-    filename = "Characteristic_Source_Term.dat";
-    
-    double X_L(ZERO), X_R(ZERO);
-    double u_eq = 1.;
-    double u_L = 0.5;
-    double u_R = 0.75;
-    double tau = 0.1;
-    double Time = 0.5;
-
-    ofstream file2((filename).c_str(), ios::out);
-    if(file){
-
-        file2<<"t"<<" "<<"X_L"<<" "<<"X_R"<<endl;
-
-        for (double t=ZERO; t<=Time; t+=0.01){
-            
-            X_L = u_eq*t + (u_L*tau) * (ONE -  exp(-(t/tau)));
-            X_R = u_eq*t + (u_R*tau) * (ONE -  exp(-(t/tau)));
-
-            file2<<std::setprecision(COUT_PRECISION)<<std::scientific\
-              <<t<<" "<<X_L<<" "<<X_R<<endl;
-             }
-    }
-    else{cerr << "Characteristic_Source_Term, Can't open file !" << endl;}
-
-
-    // */
-
-	/***** SIMULATION END *****/
+    /***************************/
+	/****** SIMULATION END *****/
+    /***************************/
 
     cout << "Hello World!\n"<<endl;
 

@@ -11,8 +11,8 @@
 #include <string>
 #include <iostream>
 #include <stdio.h>
-#include <time.h> //Measure the CPU time
-#include <fstream>  //To write inside a file
+#include <time.h>    //Measure the CPU time
+#include <fstream>   //To write inside a file
 #include <algorithm> //For the min/max functions
 
 using namespace std;
@@ -23,7 +23,7 @@ using Eigen::MatrixXcd;
 using Eigen::ComplexEigenSolver;
 using Eigen::Vector3d; //For the function Compute_k_Star_State
 using Eigen::MatrixXd;
-using Eigen::SparseLU; //For acoustic implicitation
+using Eigen::SparseLU; //For acoustic time-implicit integration
 using Eigen::DiagonalMatrix;
 
 //Defining a type for sparse matrix used for acoustic implicitation

@@ -112,14 +112,11 @@ Sol_Isen::Sol_Isen(Mesh& M,\
            1.;
 
     //Equilibrium state
-    
     W_eq_<<0.5,
         3.e5,
         3.,
         3.e5,
         3.;
-        
-    //W_eq_ = VectorXd::Zero(5);
 
     //Time matrix
     //Time relaxation exponential operator
@@ -136,15 +133,13 @@ Sol_Isen::Sol_Isen(Mesh& M,\
                mu_3,
                mu_4;
 
-    //Vector5d U_state_ref = NConsVarToConsVarLoc(W_ref_, Therm);
-
     Vector5d One;
     One<<ONE,
          ONE,
          ONE,
          ONE,
          ONE;
-    //TimeMat_ = TimeRelaxMat(U_state_ref, Relax_mu);
+
     TimeMat_ = TimeRelaxMat(One, Relax_mu);
     TimeMat_         *= (ONE/etaRelax_(0));
 
@@ -185,7 +180,6 @@ Sol_Isen::Sol_Isen(Mesh& M,\
     double uI_frozen = (m1_avr/m_avr)*u1_avr + (m2_avr/m_avr)*u2_avr; 
     double pI_frozen = (m2_avr/m_avr)*p1_avr + (m1_avr/m_avr)*p2_avr;
 
-    //uI_Frozen_=uI_frozen;
     uI_Frozen_=100.;
 
     DiracMassFrozen_ << -uI_frozen*(alpha1_R - alpha1_L),
@@ -201,7 +195,6 @@ Sol_Isen::Sol_Isen(Mesh& M,\
 
     EigenvaluesFrozen_ = (EigenvaluesFrozen.array().abs()).maxCoeff();
 
-    //////////////////////////////////////////////////////////////////
 }
 
 Sol_Isen::Sol_Isen( Sol_Isen& solution){
@@ -341,9 +334,6 @@ void Sol_Isen::ConsVarInit(Vector5d& InitR, Vector5d& InitL,\
     double x_0 = (*this).x_0_;
     double Ncols = InitR.rows();
 
-    //double tauP = tauRelax(0);
-    //double tauU = tauRelax(1);
-
     //double du, dp;
 
     //local variables
@@ -398,19 +388,11 @@ void Sol_Isen::ConsVarInit(Vector5d& InitR, Vector5d& InitL,\
         ((*this).ConsVar_)(i,4) = m2*u2;
 
         //SourceTerms Vector Filled
-        //FIXME
         ((*this).SourceTerms_)(i,0) = ZERO;
         ((*this).SourceTerms_)(i,1) = ZERO;
         ((*this).SourceTerms_)(i,2) = ZERO;
         ((*this).SourceTerms_)(i,3) = ZERO;
         ((*this).SourceTerms_)(i,4) = ZERO;
-        /*
-        ((*this).SourceTerms_)(i,0) = -(Kp_Coeff(pRef, alpha1)/tauP)*dp;
-        ((*this).SourceTerms_)(i,1) = ZERO;
-        ((*this).SourceTerms_)(i,2) = +(Ku_Coeff(mRef, alpha1)/tauU)*du;
-        ((*this).SourceTerms_)(i,3) = ZERO;
-        ((*this).SourceTerms_)(i,4) = -(Ku_Coeff(mRef, alpha1)/tauU)*du;
-        */
     }
 }
 
@@ -798,7 +780,6 @@ void Sol_Isen::SolExact_Update(Mesh& mesh, double time){
         Matrix5d RmatEigenVectorsInv = EigenVectorBasisInv_;
 
         //Coords of InitR_ - InitL_ in the eigenvector base
-
         Vector5d U_state_L = NConsVarToConsVarLoc(InitL_, SolTherm_);
         Vector5d U_state_R = NConsVarToConsVarLoc(InitR_, SolTherm_);
         Vector5d DeltaCoords = RmatEigenVectorsInv*(U_state_R - U_state_L);
@@ -895,7 +876,6 @@ void Sol_Isen::SolExact_Update(Mesh& mesh, double time){
         Vector5d tauvec = TimeMat_*One;
 
         //Coords of InitR_ - InitL_ in the eigenvector base
-
         Vector5d U_state_L = NConsVarToConsVarLoc(InitL_, SolTherm_);
         Vector5d U_state_R = NConsVarToConsVarLoc(InitR_, SolTherm_);
 
@@ -943,11 +923,6 @@ void Sol_Isen::SolExact_Update(Mesh& mesh, double time){
                      Heaviside(xcell-x_0_, time, EigenValues(4));
 
             H_uI_Frozen = Heaviside(xcell-x_0_, time, uI_Frozen_); 
-
-            /*
-            cout<<"xcell = "<<xcell<<endl;
-            cout<<"H_Eigen_uI_frozen = "<<H_uI_Frozen<<endl;
-            */
 
             for(int nVar=0;nVar<5;nVar++){
 
@@ -1718,8 +1693,6 @@ Matrix5d LinearizedSourceTermsCons(Vector5d& W_state,\
         double etaP, double etaU\
         ){
 
-    //
-
     //Local variables
     double alpha1, alpha2, rho1, rho2, p1, p2;
     double m1, m2, c1, c2, C1, C2;
@@ -2127,12 +2100,6 @@ double RHJumpConditionDichotomy(\
         Pmid    = PressureRHJumpFunction(2, Jshock, tau_mid, Therm) - PR;
         Psup    = PressureRHJumpFunction(2, Jshock, tau_sup, Therm) - PR;
     }
-    /*
-    cout<<"Inside RHJumpConditionDichotomy, p_in = "<<p_R<<endl;
-    cout<<"Inside RHJumpConditionDichotomy, tau_inf = "<<tau_inf<<", tau_R = "<<tau_R<<", tau_sup = "<<tau_sup<<endl;
-    cout<<"Inside RHJumpConditionDichotomy, P_inf   = "<<Pinf<<", P_R = "<<PR<<", P_sup = "<<Psup<<endl;
-*/
-
 
     if(Pinf*Psup>= ZERO){
 
@@ -2555,13 +2522,6 @@ double AkRelaxDirac(double x, double t,\
         double uI_Frozen, double lambda_k,\
         double ak, double ak_eq,\
         double dirac_weight, double tauvec){
-
-    /*
-    double ak_star = ak + dirac_weight/fabs(lambda_k - uI_Frozen);
-    double tcofac = tauvec*(x - uI_Frozen*t)/(lambda_k - uI_Frozen);
-
-    double result = ak_star*exp(-tcofac) + ak_eq*(ONE - exp(-tcofac));
-    */
 
     double result = ZERO;
     double vmax = max(uI_Frozen, lambda_k);

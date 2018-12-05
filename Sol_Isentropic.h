@@ -4,7 +4,7 @@
 #include "Mesh.h"
 #include "ThermoLaw.h"
 #include <string>
-#include <stdlib.h> //to have exit EXIT_FAILURE
+#include <stdlib.h> //provides exit EXIT_FAILURE
 
 using namespace std;
 using Eigen::VectorXd;
@@ -24,11 +24,11 @@ class Sol_Isen
 
     public:
 
-	//String containing the world characterizing
+	//String containing the word characterizing
 	//the left boundary condition type, ex: 'transparent'	
 	string LeftBCType_;
 
-	//String containing the world characterizing
+	//String containing the word characterizing
 	//the right boundary condition type, ex: 'transparent'	
 	string RightBCType_;
 
@@ -228,7 +228,6 @@ class Sol_Isen
 	//methods:
 
     //Initialization 
-
     void ConsVarInit(Vector5d& InitR, Vector5d& InitL,\
             Vector3d tauRelax, double pRef, double mRef,\
             int NcellExt, int Ncells, double Length);
@@ -365,7 +364,6 @@ Matrix5d LinearizedJacobianCons(Vector5d& W_state,\
         ThermoLaw& Therm\
         );
 
-/*%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%*/
 /************************************************/
 /**************  CONSERVATIVE FLUX  *************/
 /************************************************/

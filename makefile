@@ -9,14 +9,15 @@ CC=gcc            #Choix du compilateur C
 CXX=g++           #choix du compilateur C++
 RM=rm -f          #Variable de suppression de fichiers
 FIND=find . -name #Variable pour trouver les fichiers
-CXXFLAGS=-g -Wall #Options de compilation pour CXX 
+#CXXFLAGS=-g -Wall #Options de compilation pour CXX 
+CXXFLAGS=-g -Wno-deprecated-declarations #Prevent Warnings related to 'deprecated functions in librairies' 
 LDFLAGS=-g        #Options pour la phase de "linkage" entre les fichiers "*.o" et les eventuelles bibliothèques
 
 #Tous les fichiers "*.cxx" , attention si par exemple main.cxx contient un " #include "Mesh.h" " alors main.cxx
 #doit etre placé à droite de Mesh.cxx sur cette ligne.
-SRCS=Param.cxx Mesh.cxx ThermoLaw.cxx Sol.cxx Sol_Isentropic.cxx Solver_Isentropic.cxx Stability.cxx main.cxx  
+SRCS=Param.cxx Mesh.cxx ThermoLaw.cxx Sol_Isentropic.cxx Solver_Isentropic.cxx main.cxx  
 #Tous les fichiers ".h"
-HEADERS=Param.h Mesh.h ThermoLaw.h Sol.h Sol_Isentropic.h Solver_Isentropic.h Stability.h
+HEADERS=Param.h Mesh.h ThermoLaw.h Sol_Isentropic.h Solver_Isentropic.h 
 
 OBJS=$(subst .cxx,.o,$(SRCS)) # Variable identique à la variable SRCS sauf que tous les fichiers ont une extension ".o" et non plus ".cxx"
 

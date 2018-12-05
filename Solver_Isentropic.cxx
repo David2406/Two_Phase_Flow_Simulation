@@ -30,7 +30,7 @@ Solver_Isen::Solver_Isen(\
     CPUTime_               = Big;
 
     //Allocating the size of the TimeMatrix_
-    //dt, dt_BL, dt_Conv
+    //three columns: dt, dt_BL, dt_Conv
     TimeMatrix_ = MatrixXd::Zero(Nfaces,3);
 }
 
@@ -78,7 +78,6 @@ void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,
     double x_face;
     Vector5d X_state_L, X_state_R;
     Vector5d H_state_avr, H_state_copy;
-    //Matrix5d LinJac_L, LinJac_R;
     Matrix5d LinJac_R;
     double weight_L = ONE_OVER_TWO;
 
@@ -92,11 +91,6 @@ void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,
     //sol inputs
     string LeftBCType  = sol.LeftBCType_;
     string RightBCType = sol.RightBCType_;
-
-    //relaxation inputs
-    //double tauMin = sol.etaRelax_(0);
-    //double etaU   = sol.etaRelax_(1);
-    //double etaP   = sol.etaRelax_(2);
 
     //Cubic relaxation 
     Vector5d STerm, STerm_L, STerm_R;
@@ -114,14 +108,6 @@ void Solver_Isen::BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshTag,
 
     //Time matrix
     Matrix5d TimeMat = sol.TimeMat_;
-
-    //FIXME
-    //Relax_mu *= -ONE;
-
-    //Vector5d ZeroTab = VectorXd::Zero(5);
-    //FIXME
-    //Linear relaxation
-    //Matrix5d RelaxDiagMat = DiagonalMatrix<double, 5>(Relax_mu); 
 
     //Cubic relaxation
     Vector5d One = VectorXd::Constant(5, ONE);
@@ -386,8 +372,6 @@ void Solver_Isen::BN_BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshT
     Matrix5d LinJac_R;
     double weight_L = ONE_OVER_TWO;
 
-    //double dtRelax_face_ini = ZERO;
-
     //Function
 
     Matrix5d Id;
@@ -401,13 +385,8 @@ void Solver_Isen::BN_BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshT
     string RightBCType = sol.RightBCType_;
 
     //relaxation inputs
-    //double tauMin = sol.etaRelax_(0);
-    //double etaU   = sol.etaRelax_(1);
-    //double etaP   = sol.etaRelax_(2);
     double tauP     = sol.tauRelax_(0);
     double tauU     = sol.tauRelax_(1);
-    //double pref     = sol.pRef_;
-    //double rhoref   = sol.mRef_;
 
     //Non-conservative products discretization
     Vector4d WaveSpeeds;
@@ -421,12 +400,6 @@ void Solver_Isen::BN_BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshT
 
     int Nfaces      = mesh.Get_Nfaces();
     double NcellExt = mesh.Get_NcellExt();
-
-    //Time matrix
-    //Matrix5d TimeMat = sol.TimeMat_;
-
-    //Cubic relaxation
-    //Vector5d One = VectorXd::Constant(5, ONE);
 
     for(int face_id = 0; face_id < Nfaces; face_id++){
 
@@ -474,38 +447,6 @@ void Solver_Isen::BN_BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshT
         }
         else{
 
-            /*
-            //Source term U_L
-            IsenBNSourceTerm(tauU, tauP, pref, rhoref,\
-                    X_state_L, STerm_L,\
-                    sol.SolTherm_);
-
-            JacMatrix_L = IsenBNSourceTermGradient(tauU, tauP, pref, rhoref,\
-                    X_state_L,\
-                    sol.SolTherm_\
-                    );
-
-            //Source term U_R
-            IsenBNSourceTerm(tauU, tauP, pref, rhoref,\
-                    X_state_L, STerm_R,\
-                    sol.SolTherm_);
-
-            JacMatrix_R = IsenBNSourceTermGradient(tauU, tauP, pref, rhoref,\
-                    X_state_R,\
-                    sol.SolTherm_\
-                    );
-
-            //Source term H
-            IsenBNSourceTerm(tauU, tauP, pref, rhoref,\
-                    H_state_copy, STerm,\
-                    sol.SolTherm_);
-
-            JacMatrix = IsenBNSourceTermGradient(tauU, tauP, pref, rhoref,\
-                    H_state_copy,\
-                    sol.SolTherm_\
-                    );
-                    */
-
             if(TimeIntegrationType_=="Rosenbrock4"){
 
                 BN_RosenBrockFourthOrder(\
@@ -544,26 +485,6 @@ void Solver_Isen::BN_BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshT
                         H_state_copy, sol.SolTherm_,\
                         tauU, tauP, dtRelax\
                         );
-
-                /*
-                   BN_ImplicitEuler(\
-                   X_state_L,\
-                   STerm_L, JacMatrix_L, Id,\
-                   dtRelax\
-                   );
-
-                   BN_ImplicitEuler(\
-                   X_state_R,\
-                   STerm_R, JacMatrix_R, Id,\
-                   dtRelax\
-                   );
-
-                   BN_ImplicitEuler(\
-                   H_state_copy,\
-                   STerm, JacMatrix, Id,\
-                   dtRelax\
-                   );
-                 */
             }
             else if(TimeIntegrationType_=="ExplicitRungeKutta4"){
             }
@@ -573,7 +494,6 @@ void Solver_Isen::BN_BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshT
             Flux_L    = ConsVarFlux(W_state_L, sol.SolTherm_); 
             Flux_R    = ConsVarFlux(W_state_R, sol.SolTherm_); 
 
-            //FIXME
             alpha1_mass_n = NConsFlux(0);
             NConsFlux(0)  = ZERO;
         }
@@ -584,7 +504,6 @@ void Solver_Isen::BN_BoundaryLayerUpdate(Sol_Isen& sol, Mesh& mesh, string MeshT
                           (dtRelax/SpaceStep)*(Flux_R - Flux_L)+\
                           (dtRelax/SpaceStep)*NConsFlux;
 
-            //FIXME
             //Special treatment of the alpha1 equation
             if(SourceTermType_!="none"){
 
@@ -639,67 +558,24 @@ Vector5d NConsFluxLoc(Vector5d& W_state_L, Vector5d& W_state_R,\
     double alpha1_R = W_state_R(0);
     double alpha2_R = ONE - alpha1_R;
 
+    //Default non-conservative products discretization
     if(SchemeTypeNCons=="Default"){
 
         //Local variables
-        //double u1_L     = W_state_L(2);
         double u2_L     = W_state_L(4);
         double p1_L     = W_state_L(1);
-        //double p2_L     = W_state_L(3);
 
-        //double u1_R     = W_state_R(2);
         double u2_R     = W_state_R(4);
         double p1_R     = W_state_R(1);
-        //double p2_R     = W_state_R(3);
 
         double uI = ONE_OVER_TWO*(u2_L + u2_R); 
         double pI = ONE_OVER_TWO*(p1_L + p1_R); 
-
-        //    NConsFlux<<-uI*(alpha1_R - alpha1_L),
-        //               ZERO,
-        //               -(alpha2_R*p2_R - alpha2_L*p2_L),
-        //               ZERO,
-        //                (alpha2_R*p2_R - alpha2_L*p2_L);
 
         NConsFlux<<-uI*(alpha1_R - alpha1_L),
             ZERO,
             +pI*(alpha1_R - alpha1_L),
             ZERO,
             -pI*(alpha1_R - alpha1_L);
-
-        /* Test Non-conservative product of Ambroso, Chalons, Galié */
-        /*
-        //Construction de la constante de relaxation
-        double rho1_L = Density_EOS(1, Therm, p1_L, ZERO); 
-        double rho1_R = Density_EOS(1, Therm, p1_R, ZERO); 
-        double c1_L   = Sound_Speed_EOS(1, Therm, rho1_L, p1_L);
-        double c1_R   = Sound_Speed_EOS(1, Therm, rho1_R, p1_R);
-        double a1 = 1.1*max(rho1_L*c1_L, rho1_R*c1_R);
-
-        //Construction des quantités de la discontinuité de contact
-        //On suppose U_L donné on construit U+
-        double m = alpha1_L*rho1_L*(u1_L - u2_L);
-        double cofac = (m/(alpha1_R*a1) - ONE)/(m/(alpha1_L*a1) - ONE);
-
-        if (cofac < ZERO){
-
-        cout<<"Inside NConsFlux BS: cofac < 0, rho1_p can not be computed"<<endl;
-        exit(EXIT_FAILURE);
-        }
-
-        double rho1_p = sqrt(cofac)*rho1_L;
-        double u1_p   = m/(alpha1_R*rho1_p) + u2_L;
-
-        double a2p2_jump = m*(u1_L - u1_p) - p1_L*(alpha1_R - alpha1_L)\
-        -alpha1_R*a1*a1*(ONE/rho1_L - ONE/rho1_p);
-
-        NConsFlux<<-uI*(alpha1_R - alpha1_L),
-        ZERO,
-        -a2p2_jump,
-        ZERO,
-        +a2p2_jump;
-
-         */
     }
     //HLLAC non-conservative products discretization
     else{
@@ -822,17 +698,6 @@ void Solver_Isen::BoundaryLayer(Sol_Isen& sol, Mesh& mesh){
                     TimeStep, TimeStep_estim, VariableType);
         }
 
-        //Pauline Lafitte & Thomas Rey Idea
-        //Storage of the solution at time NRelax-1 and NRelax
-        //in order to reconstruct the time-gradient
-        /*
-        if(ite==NRelax_-1){
-
-            sol.ConsVarOld_ = sol.ConsVar_;
-
-        }
-        */
-
     }
 
 }
@@ -847,7 +712,6 @@ void Solver_Isen::BoundaryLayerTest(Sol_Isen& sol, Mesh& mesh, string Filename){
 
     string FileOutputFormat = FileOutputFormat_;
     string FileName  = Filename;
-    //string FileName2 = "BS_Extended_CFL005_adapt.dat";
     char numstrCFL[20]; // enough to hold all numbers up to 64-bits
     sprintf(numstrCFL, "%f", CourantBL_);
     string FileName2 = Filename+"_CFL"+numstrCFL+".dat";
@@ -877,10 +741,6 @@ void Solver_Isen::BoundaryLayerTest(Sol_Isen& sol, Mesh& mesh, string Filename){
 
     int ite = 0;
 
-    //FIXME
-    //for (int ite = 1; ite <= NRelax_;ite++){
-    //for (int ite = 0; ite <= 2;ite++){
-
     while (TimeElapsed_ < SimulationTime_){
 
     //Update of the timestep in order to update the time boundary layer
@@ -895,7 +755,6 @@ void Solver_Isen::BoundaryLayerTest(Sol_Isen& sol, Mesh& mesh, string Filename){
     BoundaryLayerUpdate(sol, mesh, MeshTag,\
             TimeStep, TimeStep_estim, VariableType);
 
-    //FIXME
     TimeElapsed_ += TimeStep;
     
     MeshTag = "Dual";
@@ -905,7 +764,6 @@ void Solver_Isen::BoundaryLayerTest(Sol_Isen& sol, Mesh& mesh, string Filename){
     BoundaryLayerUpdate(sol, mesh, MeshTag,\
     TimeStep, TimeStep_estim, VariableType);
 
-    //FIXME
     TimeElapsed_ += TimeStep;
 
     //TimeElapsed_ += dtRelax_;
@@ -961,12 +819,6 @@ void Solver_Isen::BoundaryLayerFracStep(Sol_Isen& sol, Mesh& mesh){
     double TimeStep       = TimeStep_;
     MeshTag = "Primal";
 
-    //Pure time-relaxation update in a cell-loop
-    /*
-       BoundaryLayerUpdateFracStep(sol, mesh, MeshTag,\
-       TimeStep, VariableType);
-     */
-
     //Pure velocity time-relaxation update in a cell-loop
     BoundaryLayerUpdateFracStepVelocity(sol, mesh, MeshTag,\
             TimeStep, VariableType);
@@ -996,11 +848,6 @@ void Solver_Isen::BoundaryLayerUpdateFracStep(Sol_Isen& sol, Mesh& mesh, string 
     //sol inputs
     string LeftBCType  = sol.LeftBCType_;
     string RightBCType = sol.RightBCType_;
-
-    //relaxation inputs
-    //double tauMin = sol.etaRelax_(0);
-    //double etaU   = sol.etaRelax_(1);
-    //double etaP   = sol.etaRelax_(2);
 
     //relaxation inputs
     double tauP     = sol.tauRelax_(0);
@@ -1184,14 +1031,7 @@ void Solver_Isen::BoundaryLayerUpdateFracStepVelocity(Sol_Isen& sol, Mesh& mesh,
     string RightBCType = sol.RightBCType_;
 
     //relaxation inputs
-    //double tauMin = sol.etaRelax_(0);
-    //double etaU   = sol.etaRelax_(1);
-    //double etaP   = sol.etaRelax_(2);
-
-    //relaxation inputs
     double tauU     = sol.tauRelax_(1);
-    //double pref     = sol.pRef_;
-    //double rhoref   = sol.mRef_;
 
     //Cubic relaxation 
     Vector5d STerm, STerm_L, STerm_R;
@@ -1359,11 +1199,6 @@ void Solver_Isen::BoundaryLayerUpdateFracStepPressure(Sol_Isen& sol, Mesh& mesh,
     string RightBCType = sol.RightBCType_;
 
     //relaxation inputs
-    //double tauMin = sol.etaRelax_(0);
-    //double etaU   = sol.etaRelax_(1);
-    //double etaP   = sol.etaRelax_(2);
-
-    //relaxation inputs
     double tauP     = sol.tauRelax_(0);
 
     //Cubic relaxation 
@@ -1455,14 +1290,6 @@ void Solver_Isen::BoundaryLayerUpdateFracStepPressure(Sol_Isen& sol, Mesh& mesh,
                             H_state_cell, sol.SolTherm_,\
                             tauP, dtRelax_face_ini\
                             );
-
-                    /*
-                    BN_Pressure_Dichotomy(\
-                            H_state_cell,\
-                            tauP, dtRelax_face_ini,\
-                            sol.SolTherm_,\
-                            epsDicho);
-                            */
                 }
             }
 
@@ -1816,29 +1643,13 @@ void Solver_Isen::Simulation(Sol_Isen& sol, Mesh& mesh,\
     double TauMin = sol.etaRelax_(0);
     dtRelax_ = CourantBL_*TauMin;
 
-    //double TimeCounter = ONE;
-    //double TimeSlope   = HUNDRED;
-
     while(TimeElapsed_ < SimulationTime_){
-    //while(TimeCounter < THREE){
 
         //The fractional step strategy is triggered
         if(FractionalStep_==true){
 
             //Update of the discrete timestep for the convection part
             TimeStepUpdate(sol, mesh);
-
-            //Time modulation
-            /*
-            if(TimeCounter < TimeSlope){
-
-                cout<<"old TimeStep = "<<TimeStep_<<endl;
-                TimeStep_   *= (TimeCounter/TimeSlope);
-                TimeCounter +=ONE;
-                cout<<"TimeCounter  = "<<TimeCounter<<endl;
-                cout<<"new TimeStep = "<<TimeStep_<<endl;
-            }
-            */
 
             //Classical Update of the time step
             TimeElapsed_+=TimeStep_;
@@ -1874,44 +1685,15 @@ void Solver_Isen::Simulation(Sol_Isen& sol, Mesh& mesh,\
             //Classical Update of the time step
             TimeElapsed_+=TimeStep_;
 
-            //cout<<"TimeStep = "<<TimeStep_<<endl;
-
-            //FIXME
-            //WARNING after BoundaryLayer the
+            //Definition of the time-step that will be used
             dtRelax_ = TimeStep_;
 
             //Boundary Layer Resolution part during: NRelax_*dtRelax_
             BoundaryLayer(sol, mesh);
 
-            //FIXME
-            //Update of the conservative variables
-            //ConsVarUpdateLafitteRey(sol, mesh);
-
-            //Update of the source terms
-            //FIXME
-            //SourceTermsUpdate(sol, mesh);
-
-            //Update of the discrete timestep for the convection part
-            //FIXME
-            //TimeStepUpdate(sol, mesh);
-
         }
-
-
-        /*
-        if(TimeElapsed_ > SimulationTime_){
-            TimeStep_ = TimeElapsed_ - SimulationTime_;
-            TimeElapsed_      = SimulationTime_;
-        }
-        */
 
         ite++;
-
-       /* 
-        cout<<"Inside Simulation: dtRelax = "<<dtRelax_<<", TimeStep = "<<TimeStep_<<\
-        ", TimeElapsed = "<<TimeElapsed_<<endl;
-        */
-        
 
         //Update NConsVar_ using the matrix ConsVar_
         sol.ConsVarToNConsVar("Primal");
@@ -2412,8 +2194,6 @@ Vector5d LinearizedSourceTermEqODE(\
     double lambda_du = etaU*Ku_Coeff(mRef, alpha1_avr)*( m_avr/(m1_avr*m2_avr)  );
     double lambda_dp = etaP*Kp_Coeff(pRef, alpha1_avr)*( C1_avr/alpha1_avr + C2_avr/alpha2_avr  );
 
-    //cout<<"Inside LinearizedSourceTermEqODE: lambda_du = "<<lambda_du<<", lambda_dp = "<<lambda_dp<<endl;
-
     //Time-integrators
     double TIdu_decr = exp(-lambda_du*( time/tauRelax  ) );
     double TIdp_decr = exp(-lambda_dp*( time/tauRelax  ) );
@@ -2439,142 +2219,6 @@ Vector2d  LocalCourant_LSTEq(Vector5d& W_state0, Vector5d& W_state_L, Vector5d& 
         double Damp,\
         int face_id\
         ){
-
-    /*
-    //Local variables
-    Vector2d TimeVector;
-    double alpha1_avr, alpha2_avr, rho1_avr, rho2_avr, p1_avr, p2_avr;
-    double m1_avr, m2_avr, m_avr, c1_avr, c2_avr, C1_avr, C2_avr;
-
-    double u1_avr, u2_avr;
-
-    Vector2d TimeLoc;
-
-    //Getting the other non-conservative quantities for the averaged state
-
-    //FIXME CUBIC RELAXATION
-    double weight_L = ONE_OVER_TWO;
-    Vector5d W_state_avr = NConsVarAveraged(W_state_L, W_state_R, weight_L);
-
-    Vector5d U_state_L   = NConsVarToConsVarLoc(W_state_L, Therm);
-    Vector5d U_state_R   = NConsVarToConsVarLoc(W_state_R, Therm);
-    Vector5d U_state_avr = NConsVarAveraged(U_state_L, U_state_R, weight_L);
-
-    //Reference state
-    Vector5d W_ref;
-    W_ref<<0.5,
-           1.e5,
-           ONE,
-           3.e6,
-           ONE;
-
-    Vector5d U_state_ref = NConsVarToConsVarLoc(W_ref, Therm);
-
-    //Equilibrium state
-    Vector5d W_eq;
-        W_eq<<0.5,
-              3.e5,
-              6.,
-              4.e6,
-              -0.5;
-
-    Vector5d U_eq = NConsVarToConsVarLoc(W_eq, Therm);
-
-    //Time relaxation exponential operator
-    double mu_0 = ONE;
-    double mu_1 = ONE;
-    double mu_2 = ONE;
-    double mu_3 = ONE;
-    double mu_4 = ONE;
-
-    Vector5d Relax_mu;
-    Relax_mu <<mu_0,
-               mu_1,
-               mu_2,
-               mu_3,
-               mu_4;
-
-    string VariableType = "ConsVar";
-
-    //Eigenvector base inverse matrix
-    Matrix5d RmatEigenVectorsInv = IsentropicBN_EigenvectorsInv(\
-            VariableType,\
-            W_state0,\
-            Therm\
-            );
-
-    Vector5d a_ref = RmatEigenVectorsInv*(U_state_ref);
-    Vector5d a_n   = RmatEigenVectorsInv*(U_state_avr);
-    Vector5d a_inf = RmatEigenVectorsInv*(U_eq);
-
-    //double CofacAlpha1 = ZERO;
-    double a_min = ZERO;
-    double a_max = ONE;
-
-    //Time step constraint to garantee the alpha1 in [0, 1]
-
-    //Case very close to the equilibrium state
-    if ( fabs(a_n(0) - a_inf(0)) < epsZero){
-
-        //CofacAlpha1 = Big;
-
-    }
-
-    //Condition to be in [0,..
-    else if ( a_n(0) > a_inf(0)){
-
-        //cout<<" a_n > a_inf --> [0,.."<<endl;
-        //CofacAlpha1 = ((a_min - a_n(0))*pow(a_ref(0), TWO))/pow(a_inf(0) - a_n(0), THREE);
-        //cout<<"CofacAlpha1 = "<<CofacAlpha1<<endl;
-
-    }
-    //Condition to be in ..,1]
-    else{
-
-        //cout<<" a_n < a_inf --> ..,1]"<<endl;
-        //CofacAlpha1 = ((a_max - a_n(0))*pow(a_ref(0), TWO))/pow(a_inf(0) - a_n(0), THREE); 
-        //cout<<"CofacAlpha1 = "<<CofacAlpha1<<endl;
-
-    }
-
-    //Function
-    alpha1_avr = W_state_avr(0);
-    alpha2_avr = ONE - alpha1_avr;
-    p1_avr     = W_state_avr(1);
-    p2_avr     = W_state_avr(3);
-
-    u1_avr = W_state_avr(2);
-    u2_avr = W_state_avr(4);
-
-    rho1_avr = Density_EOS(1, Therm, p1_avr, ZERO);
-    rho2_avr = Density_EOS(2, Therm, p2_avr, ZERO);
-    m1_avr = alpha1_avr*rho1_avr;
-    m2_avr = alpha2_avr*rho2_avr;
-    m_avr  = m1_avr + m2_avr;
-    c1_avr = Sound_Speed_EOS(1, Therm, rho1_avr, p1_avr);
-    c2_avr = Sound_Speed_EOS(2, Therm, rho2_avr, p2_avr);
-
-    C1_avr = rho1_avr*pow(c1_avr,TWO);
-    C2_avr = rho2_avr*pow(c2_avr,TWO);
-
-    //Deriving the co-factors related to the pressure and velocity relaxations
-   
-    double lambda_du = etaU*Ku_Coeff(mRef, alpha1_avr)*( m_avr/(m1_avr*m2_avr)  );
-    double lambda_dp = etaP*Kp_Coeff(pRef, alpha1_avr)*( C1_avr/alpha1_avr + C2_avr/alpha2_avr  );
- 
-    //FIXME
-    double mu_max = ONE;
-    //double mu_max = ONE/CofacAlpha1;
-    lambda_du = mu_max;
-    lambda_dp = mu_max;
-    double dtRelax = min( ONE/lambda_du, ONE/lambda_dp  )*tauMin;
-
-    double dtConv  = (SpaceStep)*(ONE/(max(max(fabs(u2_avr+c2_avr), fabs(u1_avr+c1_avr)), max(fabs(u2_avr-c2_avr), fabs(u1_avr-c1_avr)))));
-
-    TimeLoc(0) = Damp*dtRelax;
-    TimeLoc(1) = Damp*dtConv;
-
-    */
 
     Vector2d TimeLoc;
     TimeLoc(0) =Big;
@@ -2628,18 +2272,7 @@ void BoundaryLayerResolutionLocal(\
             Therm\
             );
 
-    //FIXME
     LinJacEqRelax = MatrixXd::Zero(5,5);
-
-    /*
-    VectorXcd eivals = LinSouTerm.eigenvalues();
-    cout << "The eigenvalues are:" << endl << eivals << endl;
-    MatrixXcd Test = LinSouTerm.cast <complex<double>> ();
-    ComplexEigenSolver<MatrixXcd> ces(Test);
-    cout << "The eigenvectors are:" 
-         << endl << ces.eigenvectors() << endl;
-
-    */
 
     //Initialization
     Vector5d H_ini = H_state;
@@ -2657,29 +2290,6 @@ void BoundaryLayerResolutionLocal(\
     for (int ite=1;ite<=NRelax;ite++){
 
         time = ite*dtRelax;
-
-        /*
-        //Non homogeneous term of the ODE
-        LSTEqODE_L = LinearizedSourceTermEqODE(\
-        W_state_avr, W_state_L,\
-        Therm, pRef, mRef,\
-        tauMin, etaP, etaU, time\
-        );
-
-        //Non homogeneous term of the ODE
-        LSTEqODE_R = LinearizedSourceTermEqODE(\
-        W_state_avr, W_state_R,\
-        Therm, pRef, mRef,\
-        tauMin, etaP, etaU, time\
-        );
-
-        //Dynamics of H
-        H_state =(Id + (dtRelax/tauMin)*LinSouTermEq )*H_ini\
-        -(dtRelax/SpaceStep)*LinJacEqRelax*( LSTEqODE_R - LSTEqODE_L  );
-
-        //Update of H_ini
-        H_ini = H_state;
-         */
 
         //Non homogeneous term of the left ODE
         RHS_L = (Id + (dtRelax/tauMin)*LinSouTerm)*RHS_L;
@@ -2714,16 +2324,8 @@ void BoundaryLayerResolutionLocalTest(\
     Vector5d V_state_L, V_state_R;
 
     //Function
-    //int nrows = H_state.rows();
-    //Matrix5d Id = MatrixXd::Identity(nrows, nrows);
 
     //Averaged state
-
-    /*
-    Vector5d W_state_avr = NConsVarAveraged(\
-            W_state_L, W_state_R,\
-            ONE_OVER_TWO);
-            */
 
     if(VariableType=="EqRelaxVar"){
 
@@ -2738,75 +2340,12 @@ void BoundaryLayerResolutionLocalTest(\
 
     }
 
-    //Gradient of the source term
-    /*
-    Matrix5d LinSouTerm = LinearizedSourceTerm(W_state_avr,\
-            VariableType,\
-            Therm,\
-            pRef, mRef,\
-            etaP, etaU\
-            );
-            */
-
-    //Source Term
-    /*
-    Vector5d STerm = SourceTerm(W_state_avr,\
-            VariableType,\
-            Therm,\
-            pRef, mRef,\
-            etaP, etaU\
-            );
-            */
-
-    //FIXME
-    //LinSouTerm = MatrixXd::Zero(nrows,nrows);
-    //STerm      = VectorXd::Zero(nrows);
-
-    //Jacobian matrix
-    //FIXME
-    /*
-       Matrix5d LinJac = LinearizedJacobian(W_state_avr,\
-       VariableType,\
-       Therm\
-       );
-
-     */
-
     //Initialization
-    //Vector5d H_ini = H_state;
     Vector5d RHS_L = -(V_state_R - V_state_L)/TWO;
     Vector5d RHS_R = (V_state_R - V_state_L)/TWO;
 
-    //Non homogeneous term of the left ODE
-    //RHS_L = (Id + (dtRelax/tauMin)*LinSouTerm)*RHS_L + (dtRelax/tauMin)*STerm;
-
-    //Non homogeneous term of the right ODE
-    //RHS_R = (Id + (dtRelax/tauMin)*LinSouTerm)*RHS_R + (dtRelax/tauMin)*STerm;
-
-    //Dynamics of H
-    /*
-       H_state =(Id + (dtRelax/tauMin)*LinSouTerm )*H_ini-\
-       (dtRelax/SpaceStep)*(LinJac_R*RHS_R - LinJac_L*RHS_L) +\
-       (dtRelax/tauMin)*STerm;
-     */
-
-    /*
-    cout<<"H_state BEFORE = "<<endl;
-    cout<<H_state<<endl<<endl;
-    */
-    //cout<<"U_R - U_L = "<<RHS_R - RHS_L<<endl<<endl;
-
     H_state = H_state + LinSouTerm*(dtRelax*STerm) -\
               LinSouTerm*((dtRelax/SpaceStep)*LinJac_R)*LinSouTerm*(RHS_R - RHS_L);
-
-    /*
-    H_state = H_state + LinSouTerm*(dtRelax*STerm) -\
-              LinSouTerm*((dtRelax/SpaceStep)*LinJac_R)*(RHS_R - RHS_L);
-    */
-    /*
-    cout<<"H_state AFTER = "<<endl;
-    cout<<H_state<<endl<<endl;
-    */
 }
 
 void SourceTermResolutionLocalNewton(\
@@ -2841,14 +2380,6 @@ void SourceTermResolutionLocalNewton(\
 
     for (int ite=1;ite<=NRelax;ite++){
 
-        //FIXME
-        /*
-        dtRelax = LocalCourant_LSTEq(W_current, W_current, W_current,\
-                Therm, pRef, mRef,\
-                tauMin, etaP, etaU,\
-                Big,\
-                CourantBL, ite);
-                */
         dtRelax = ZERO;
 
         time += dtRelax;
@@ -2918,182 +2449,6 @@ file<<std::setprecision(COUT_PRECISION)<<std::scientific\
 else{cerr << "SaveBereuxSainsaulieu, Can't open file !" << endl;}
 
 }
-
-/*
-   void BoundaryLayerResolution(\
-   Vector5d& H_state,Vector5d& W_state_L, Vector5d& W_state_R,\
-   ThermoLaw& Therm, double pRef, double mRef,\
-   double etaP, double etaU,\
-   double dtRelax, double tauMin, double NRelax,\
-   double SpaceStep\
-   ){
-
-//Local variables
-double time;
-Vector5d LSTEqODE_L, LSTEqODE_R;
-
-//Function
-int nrows = H_state.rows();
-Matrix5d Id = MatrixXd::Identity(nrows, nrows);
-
-//Averaged state
-Vector5d W_state_avr = NConsVarAveraged(\
-W_state_L, W_state_R,\
-ONE_OVER_TWO);
-
-//Linearized source term 
-Matrix5d LinSouTermEq = LinearizedSourceTermsEq(W_state_avr,\
-Therm,\
-pRef, mRef,\
-etaP, etaU\
-);
-
-//Constant Jacobian
-//Matrix5d LinJacEqRelax = LinearizedJacobianEqRelax(W_state_avr,\
-Therm\
-);
-
-double c0       = 3.e2;
-double rho_pert = 1.e3;
-double p_pert   = 5.e6;
-Matrix5d LinJacEqRelax = c0*Id;
-LinJacEqRelax(3,2) = ONE/rho_pert;
-LinJacEqRelax(4,1) = p_pert;
-
-cout<<"Inside ODE H: Linearized Jacobian = "<<endl;
-cout<<LinJacEqRelax<<endl<<endl;
-
-//Initialization
-Vector5d H_ini = H_state;
-
-string filename     = "ODE_H.dat";
-string filename_err = "ODE_H_Pert_Error.dat";
-ofstream file((filename).c_str(), ios::out);
-ofstream file_err((filename_err).c_str(), ios::app);
-
-//printed variables
-double alpha1, U, P, du, dp;
-
-//Exact solution
-Vector5d SolSingleCharact;
-double alpha1_ex, U_ex, P_ex, du_ex, dp_ex;
-
-//Error Curves Quantitites
-double alpha1_err(ZERO), U_err(ZERO), P_err(ZERO), du_err(ZERO), dp_err(ZERO);
-double norm_alpha1_ex(ZERO), norm_U_ex(ZERO), norm_P_ex(ZERO), norm_du_ex(ZERO), norm_dp_ex(ZERO);
-
-if(file){
-
-file<<"Time"<<" "<<"alpha1"<<" "<<"U"<<" "<<"P"<<" "<<"du"<<" "<<"dp"\
-<<" "<<" "<<"alpha1_ex"<<" "<<"U_ex"<<" "<<"P_ex"<<" "<<"du_ex"<<" "<<"dp_ex"<<endl;
-
-//Save H_state at initial condition
-alpha1  = H_state(0);
-U       = H_state(1);
-P       = H_state(2);
-du      = H_state(3);
-dp      = H_state(4);
-time = ZERO;
-
-file<<std::setprecision(COUT_PRECISION)<<std::scientific\
-        <<time<<" "<<alpha1<<" "<<U<<" "<<P<<" "<<du<<" "<<dp\
-        <<" "<<alpha1<<" "<<U<<" "<<P<<" "<<du<<" "<<dp<<endl;
-
-while (time <= NRelax*tauMin){
-
-    time += dtRelax;
-
-    //Non homogeneous term of the ODE
-    LSTEqODE_L = LinearizedSourceTermEqODE(\
-            W_state_avr, W_state_L,\
-            Therm, pRef, mRef,\
-            tauMin, etaP, etaU, time\
-            );
-
-    //Non homogeneous term of the ODE
-    LSTEqODE_R = LinearizedSourceTermEqODE(\
-            W_state_avr, W_state_R,\
-            Therm, pRef, mRef,\
-            tauMin, etaP, etaU, time\
-            );
-
-    //Dynamics of H
-    H_state =(Id + (dtRelax/tauMin)*LinSouTermEq )*H_ini\
-             -(dtRelax/SpaceStep)*LinJacEqRelax*( LSTEqODE_R - LSTEqODE_L  );
-
-    //Update of H_ini
-    H_ini = H_state;
-
-    //Save H_state
-    alpha1  = H_state(0);
-    U       = H_state(1);
-    P       = H_state(2);
-    du      = H_state(3);
-    dp      = H_state(4);
-
-    //Save Exact H (when known)
-
-    SolSingleCharact = BoundaryLayerSolSingleCharact_Pert(\
-            W_state_avr, W_state_L, W_state_R,\
-            Therm, pRef, mRef,\
-            tauMin, etaP, etaU, time,\
-            c0, rho_pert, p_pert, SpaceStep\
-            );
-
-    alpha1_ex  = SolSingleCharact(0);
-    U_ex       = SolSingleCharact(1);
-    P_ex       = SolSingleCharact(2);
-    du_ex      = SolSingleCharact(3);
-    dp_ex      = SolSingleCharact(4);
-
-
-
-    alpha1_ex  = alpha1 ;
-    U_ex       = U      ;
-    P_ex       = P      ;
-    du_ex      = du     ;
-    dp_ex      = dp     ;
-
-
-    //Updating the error curves
-
-
-    alpha1_err  += fabs(alpha1-alpha1_ex);
-    U_err       += fabs(U-U_ex);
-    P_err       += fabs(P-P_ex);
-    du_err      += fabs(du-du_ex);
-    dp_err      += fabs(dp-dp_ex);
-
-    norm_alpha1_ex  += fabs(alpha1_ex);
-    norm_U_ex       += fabs(U_ex);
-    norm_P_ex       += fabs(P_ex);
-    norm_du_ex      += fabs(du_ex);
-    norm_dp_ex      += fabs(dp_ex);
-
-    file<<std::setprecision(COUT_PRECISION)<<std::scientific\
-        <<time<<" "<<alpha1<<" "<<U<<" "<<P<<" "<<du<<" "<<dp\
-        <<" "<<alpha1_ex<<" "<<U_ex<<" "<<P_ex<<" "<<du_ex<<" "<<dp_ex<<endl;
-
-}
-
-
-alpha1_err  /= norm_alpha1_ex;
-U_err       /= norm_U_ex;
-P_err       /= norm_P_ex;
-du_err      /= norm_du_ex;
-dp_err      /= norm_dp_ex;
-
-
-}
-
-else{cerr << "ODE H, Can't open file !" << endl;}
-
-file_err<<std::setprecision(COUT_PRECISION)<<std::scientific\
-        <<dtRelax<<" "<<alpha1_err<<" "<<U_err<<" "<<P_err<<" "<<du_err<<" "<<dp_err<<endl;
-
-}
-
-*/
 
 /*%%%%%%%%%%  Conservative Variables %%%%%%%%%%*/
 
@@ -3212,13 +2567,10 @@ Vector5d BoundaryLayerSolSingleCharact(\
     double lambda_du = etaU*Ku_Coeff(mRef, alpha1_avr)*( m_avr/(m1_avr*m2_avr)  );
     double lambda_dp = etaP*Kp_Coeff(pRef, alpha1_avr)*( C1_avr/alpha1_avr + C2_avr/alpha2_avr  );
 
-    //cout<<"Inside LinearizedSourceTermEqODE: lambda_du = "<<lambda_du<<", lambda_dp = "<<lambda_dp<<endl;
-
     //Time-integrators
     double TIdu_decr = exp(-lambda_du*( time/tauRelax  ) );
     double TIdp_decr = exp(-lambda_dp*( time/tauRelax  ) );
     double TIdp_plat = ONE - TIdp_decr;
-    //double TIdp_lin  = -time + ( tauRelax/lambda_dp  )*TIdp_plat;
 
     //Cofactors contributions
     double Cofac_avr = ( alpha1_avr*alpha2_avr  )/( alpha2_avr*C1_avr + alpha1_avr*C2_avr  );
@@ -3277,8 +2629,6 @@ Vector5d BoundaryLayerSolSingleCharact_Pert(\
     //Deriving the co-factors related to the pressure and velocity relaxations
     double lambda_du = etaU*Ku_Coeff(mRef, alpha1_avr)*( m_avr/(m1_avr*m2_avr)  );
     double lambda_dp = etaP*Kp_Coeff(pRef, alpha1_avr)*( C1_avr/alpha1_avr + C2_avr/alpha2_avr  );
-
-    //cout<<"Inside LinearizedSourceTermEqODE: lambda_du = "<<lambda_du<<", lambda_dp = "<<lambda_dp<<endl;
 
     //Time-integrators
     double TIdu_decr = exp(-lambda_du*( time/tauRelax  ) );
@@ -3432,16 +2782,6 @@ void TimeIntegration(Sol_Isen& sol, double SimulationTime, double dtRelax,\
         <<W_state_exact(0)<<" "<<W_state_exact(1)<<" "<<W_state_exact(2)<<" "\
         <<W_state_exact(3)<<" "<<W_state_exact(4)<<endl;
     
-    /*
-       file<<std::setprecision(COUT_PRECISION)<<std::scientific\
-       <<TimeElapsed<<" "<<ite<<" "<<TimeStepIteCounter<<" "\
-       <<dtRelax_ini<<" "\
-       <<U_state_ini(0)<<" "<<U_state_ini(1)<<" "<<U_state_ini(2)<<" "\
-       <<U_state_ini(3)<<" "<<U_state_ini(4)<<" "\
-       <<U_state_exact(0)<<" "<<U_state_exact(1)<<" "<<U_state_exact(2)<<" "\
-       <<U_state_exact(3)<<" "<<U_state_exact(4)<<endl;
-     */
-
     //Error Initialization
 
     Vector5d Error   = VectorXd::Zero(5);
@@ -3455,8 +2795,6 @@ void TimeIntegration(Sol_Isen& sol, double SimulationTime, double dtRelax,\
 
     if(file){  // If the opening is successful
 
-        //FIXME
-        //while(ite < 1){
         while(TimeElapsed < SimulationTime){
 
             ite++;
@@ -3471,31 +2809,9 @@ void TimeIntegration(Sol_Isen& sol, double SimulationTime, double dtRelax,\
                dtRelax_ini\
                );
              
-               /**
-               
-               ImplicitEuler(\
-                       TauMat,\
-                       EigenVectorBasis, EigenVectorBasisInv,\
-                       U_state_ini, U_state_ref, U_state_eq,\
-                       STerm_ini, JacVector_ini, One,\
-                       dtRelax_ini\
-                       );
-
-                       */
-
                JacVector_ini = NonLinearSpringGradient(\
                        TauMat, U_state_ini, U_state_eq,\
                        EigenVectorBasisInv);
-
-               /*
-                  RungeKuttaFourthOrder(\
-                  TauMat,\
-                  EigenVectorBasis, EigenVectorBasisInv,\
-                  U_state_ini, U_state_ref, U_state_eq,\
-                  STerm_ini,\
-                  dtRelax_ini\
-                  );
-                */
 
             //Update of STerm_ini
             NonLinearSpring(TauMat, U_state_ini, U_state_eq, STerm_ini,\
@@ -3504,11 +2820,9 @@ void TimeIntegration(Sol_Isen& sol, double SimulationTime, double dtRelax,\
             TimeElapsed += dtRelax_ini;
 
             //Error update
-            //FIXME
             
             //Time-step for the next iteration
             //AFTER the error update
-            //dtRelax_ini = dtRelax_estim;
             
             NonLinearSpringExactSolution(U_state_exact, U_state_exact_ini,\
                     U_state_eq, EigenVectorBasis, EigenVectorBasisInv,\
@@ -3522,15 +2836,6 @@ void TimeIntegration(Sol_Isen& sol, double SimulationTime, double dtRelax,\
                 NormRef(k) += dtRelax_ini*fabs(sol.W_ref_(k));
             }
             
-            /*
-            for (int k =0; k<5;k++){
-                Error(k)   += dtRelax_ini*fabs(U_state_ini(k) - U_state_exact(k));
-                NormRef(k) += dtRelax_ini*fabs(U_state_ref(k));
-            }
-            */
-
-            //FIXME
-            
             file<<std::setprecision(COUT_PRECISION)<<std::scientific\
                 <<TimeElapsed<<" "<<ite<<" "<<TimeStepIteCounter<<" "\
                 <<dtRelax_ini<<" "\
@@ -3538,29 +2843,12 @@ void TimeIntegration(Sol_Isen& sol, double SimulationTime, double dtRelax,\
                 <<W_state_ini(3)<<" "<<W_state_ini(4)<<" "\
                 <<W_state_exact(0)<<" "<<W_state_exact(1)<<" "<<W_state_exact(2)<<" "\
                 <<W_state_exact(3)<<" "<<W_state_exact(4)<<endl;
-            
-            /*
-            file<<std::setprecision(COUT_PRECISION)<<std::scientific\
-                <<TimeElapsed<<" "<<ite<<" "<<TimeStepIteCounter<<" "\
-                <<dtRelax_ini<<" "\
-                <<U_state_ini(0)<<" "<<U_state_ini(1)<<" "<<U_state_ini(2)<<" "\
-                <<U_state_ini(3)<<" "<<U_state_ini(4)<<" "\
-                <<U_state_exact(0)<<" "<<U_state_exact(1)<<" "<<U_state_exact(2)<<" "\
-                <<U_state_exact(3)<<" "<<U_state_exact(4)<<endl;
-                */
         }
 
         file.close();
 
         //Normalizing error
         //Saving error
-
-        /*
-        for (int k =0; k<5;k++){
-            Error(k)   += fabs(W_state_ini(k) - W_state_exact(k));
-            NormRef(k) += fabs(W_ref(k));
-        }
-        */
 
         for (int k =0; k<5;k++){
             Error(k)   /= NormRef(k);
@@ -3783,12 +3071,6 @@ void BN_ImplicitPressure(\
     double noneq  = (ONE - TWO*alpha1)*(dp/P);
     double Pt     = (alpha1*C2 + alpha2*C1) - (alpha1*C2 - alpha2*C1)*(dp/P);
 
-    // Gallouet et al. alpha1 update
-    /*
-       double alpha1_up = (alpha1/alpha2)*exp(-tadim*(dp/P))/(ONE +(alpha1/alpha2)*\
-       exp(-tadim*(dp/P))); 
-     */
-
     //BS alpha1 update
     double alpha1_up = alpha1 - tadim*(alpha1*alpha2)*(dp/P)/\
                        ( ONE + tadim*(noneq + Pt/P)); 
@@ -3813,13 +3095,7 @@ void BN_ImplicitPressure(\
     */
 
     //W_state_ini update
-    //FIXME
-    //W_state_ini(0) = alpha1_up;
     U_state_ini(0) = alpha1_up;
-    //W_state_ini(1) = p1_up;
-    //W_state_ini(3) = p2_up;
-
-    //U_state_ini = NConsVarToConsVarLoc(W_state_ini, Therm);
 
     return;
 
@@ -3832,24 +3108,7 @@ void BN_ImplicitVelocityPressure(\
         ){
 
     //Pressure relaxation
-    //Vector5d W_state_ini = ConsVarToNConsVarLoc(U_state_ini, Therm); 
-    //double alpha1 = W_state_ini(0);
-    //double alpha2 = ONE - alpha1;
-    //double p1     = W_state_ini(1);
-    //double p2     = W_state_ini(3);
-    //double dp     = p2 - p1;
-    //double P      = p2 + p1;
-    //double rho1   = Density_EOS(1, Therm, p1, ZERO);
-    //double rho2   = Density_EOS(2, Therm, p2, ZERO);
-    //double c1     = Sound_Speed_EOS(1, Therm, rho1, p1);
-    //double c2     = Sound_Speed_EOS(1, Therm, rho2, p2);
-    //double C1     = rho1*c1*c1;
-    //double C2     = rho2*c2*c2;
-
     double tadim  = dtRelax_ini/tauP;
-    //double noneq  = (ONE - TWO*alpha1)*(dp/P);
-    //double Pt     = (alpha1*C2 + alpha2*C1) - (alpha1*C2 - alpha2*C1)*(dp/P);
-    //noneq = ZERO;
 
     //Velocity relaxation
     double m1   = U_state_ini(1);
@@ -3870,26 +3129,6 @@ void BN_ImplicitVelocityPressure(\
     //m1u1 m2u2 updates
     U_state_ini(2) = m1u1_up;
     U_state_ini(4) = m2u2_up;
-
-    //FIXME
-    //Pressure relaxation Bereux-Sainsaulieu
-    
-    /* 
-       double alpha1_up = alpha1 - tadim*(alpha1*alpha2)*(dp/P)/\
-       ( ONE + tadim*(noneq + Pt/P)); 
-     */
-                       
-    /*
-    BN_Pressure_Dichotomy(\
-            U_state_ini,\
-            tauP, dtRelax_ini,\
-            Therm,\
-            epsDicho);
-            */
-            
-
-    //U_state_ini update
-    //U_state_ini(0) = alpha1_up;
 
     return;
 
@@ -3947,14 +3186,6 @@ double  AlphaRelaxFunctionBS(\
     double p2  = Pressure_EOS(2, Therm, m2_n/(ONE - alpha1), ZERO);
     double dp  = p2 - p1;
 
-    //cout<<"Alpha1 = "<<alpha1<<endl;
-    /*
-       cout<<"Inside AlphaRelaxFunctionBS: dp            = "<<dp<<endl;
-       cout<<"Inside AlphaRelaxFunctionBS: frozen alpha1 = "<<alpha1_n + (dtRelax_ini/SpaceStep)*alpha1_mass_n<<endl;
-       cout<<"Inside AlphaRelaxFunctionBS: cofac*dp      = "<<cofac*dp<<endl;
-       cout<<"Inside AlphaRelaxFunctionBS: all           = "<<alpha1 + cofac*dp - alpha1_n - (dtRelax_ini/SpaceStep)*alpha1_mass_n<<endl;
-     */
-
     return alpha1 + cofac*dp - alpha1_n - (dtRelax_ini/SpaceStep)*alpha1_mass_n;
     
 }
@@ -3983,8 +3214,6 @@ double AlphaDichotomy(\
             tauP, dtRelax_ini,\
             Therm\
             );
-
-    //cout<<"Inside AlphaDichotomy: Fmid = "<<Fmid<<endl;
 
     double Fsup = AlphaRelaxFunction(\
             alpha1_sup,\
@@ -4048,11 +3277,6 @@ double AlphaDichotomyBS(\
     double Fsup        = ZERO;
     double alpha1_mid  = (alpha1_inf + alpha1_sup)/TWO;
 
-    /*
-    cout<<"Dichotomy BS: alpha1_inf = "<<alpha1_inf<<", alpha1_mid = "<<alpha1_mid<<", alpha1_sup = "<<alpha1_sup<<endl;
-*/
-
-    //cout<<"Finf: "<<endl;
     Finf = AlphaRelaxFunctionBS(\
             alpha1_inf,\
             U_state_ini,\
@@ -4062,7 +3286,6 @@ double AlphaDichotomyBS(\
             alpha1_mass_n\
             );
 
-    //cout<<"Fmid: "<<endl;
     Fmid = AlphaRelaxFunctionBS(\
             alpha1_mid,\
             U_state_ini,\
@@ -4072,7 +3295,6 @@ double AlphaDichotomyBS(\
             alpha1_mass_n\
             );
 
-    //cout<<"Fsup: "<<endl;
     Fsup = AlphaRelaxFunctionBS(\
             alpha1_sup,\
             U_state_ini,\
@@ -4081,9 +3303,7 @@ double AlphaDichotomyBS(\
             Therm,\
             alpha1_mass_n\
             );
-    //cout<<"Inside AlphaDichotomy: Fmid = "<<Fmid<<endl;
 
-           
     //Function
 
     if(fabs(Fmid)<=eps){
@@ -4143,8 +3363,6 @@ void BN_Pressure_Dichotomy(\
             alpha1_inf_ini, alpha1_sup_ini,\
             eps);
 
-    //cout<<"Inside Pressure_Dichotomy: alpha1_new = "<<alpha1_ini<<endl;
-
     //Update
     U_state_ini(0) = alpha1_ini;
 }
@@ -4170,8 +3388,6 @@ void BN_Pressure_DichotomyBS(\
             alpha1_mass_n,\
             eps);
 
-    //cout<<"Inside Pressure_Dichotomy: alpha1_new = "<<alpha1_ini<<endl;
-
     //Update
     U_state_ini(0) = alpha1_ini;
 }
@@ -4186,7 +3402,6 @@ void RosenBrockFourthOrder(\
         ){
 
     //SHAMPINE COEFFICIENTS FOR THE ROSENBROCK ORDER 4 METHOD
-    //FIXME
     const double GAM = ONE_OVER_TWO;
     //const double GAM = ONE;
 
@@ -4195,7 +3410,6 @@ void RosenBrockFourthOrder(\
     const double A21 = TWO;
     const double A31 = 48./25., A32 = 6./25.;
 
-    //FIXME
     //B1 = ONE
     const double B1 = 19./9., B2 = ONE_OVER_TWO, B3 = 25./108., B4 = 125./108.;
 
@@ -4260,7 +3474,6 @@ void BN_RosenBrockFourthOrder(\
         ){
 
     //SHAMPINE COEFFICIENTS FOR THE ROSENBROCK ORDER 4 METHOD
-    //FIXME
     const double GAM = ONE_OVER_TWO;
     //const double GAM = ONE;
 
@@ -4269,7 +3482,6 @@ void BN_RosenBrockFourthOrder(\
     const double A21 = TWO;
     const double A31 = 48./25., A32 = 6./25.;
 
-    //FIXME
     //B1 = ONE
     const double B1 = 19./9., B2 = ONE_OVER_TWO, B3 = 25./108., B4 = 125./108.;
 
@@ -4311,7 +3523,6 @@ void BN_RosenBrockFourthOrder(\
 
     double noneq  = (ONE - TWO*alpha1)*(dp/P);
     double Pt     = (alpha1*C2 + alpha2*C1) - (alpha1*C2 - alpha2*C1)*(dp/P);
-    //noneq = ZERO;
 
     double alpha_relax = -(ONE/tauP)*(noneq + Pt/P); 
     double P_relax = (GAM*dtRelax_ini)/(ONE  - (GAM*dtRelax_ini*alpha_relax));
@@ -4754,63 +3965,6 @@ Vector4d WaveSpeedEstimate(Vector5d& W_state_L, Vector5d& W_state_R,\
 
 }
 
-/*
-Vector5d U_P_star_states(Vector5d& W_state_L, Vector5d& W_state_R,\
-                         Vector4d& WaveSpeeds,\
-                         ThermoLaw& Therm){
-
-    //Local variables
-    double alpha1_L  = W_state_L(0);
-    double alpha1_R  = W_state_R(0);
-    double p1_L      = W_state_L(1); 
-    double p1_R      = W_state_R(1); 
-    double rho1_L    = Density_EOS(1, Therm, p1_L, ZERO); 
-    double rho1_R    = Density_EOS(1, Therm, p1_R, ZERO); 
-    double u1_L      = W_state_L(2); 
-    double u1_R      = W_state_R(2); 
-
-    double alpha2_L  = ONE - alpha1_L;
-    double alpha2_R  = ONE - alpha1_R;
-    double p2_L      = W_state_L(3); 
-    double p2_R      = W_state_R(3); 
-    double rho2_L    = Density_EOS(2, Therm, p2_L, ZERO); 
-    double rho2_R    = Density_EOS(2, Therm, p2_R, ZERO); 
-    double u2_L      = W_state_L(4); 
-    double u2_R      = W_state_R(4);
-
-    double S1_L = WaveSpeeds(0);
-    double S1_R = WaveSpeeds(1);
-    double S2_L = WaveSpeeds(2);
-    double S2_R = WaveSpeeds(3);
-
-    //Function
-    double mq1_R =  rho1_R*(S1_R - u1_R);
-    double mq1_L = -rho1_L*(S1_L - u1_L);
-    double mq1   = mq1_R + mq1_L;
-
-    double u1_star = (mq1_R*u1_R + mq1_L*u1_L - (p1_R - p1_L) )/mq1;
-    double p1_star = p1_R + mq1_R*(u1_star - u1_R);
-
-    double mq2_R =  alpha2_R*rho2_R*(S2_R - u2_R);
-    double mq2_L = -alpha2_L*rho2_L*(S2_L - u2_L);
-    double mq2   = mq2_R + mq2_L;
-    double u2_star = (mq2_R*u2_R + mq2_L*u2_L - (alpha2_R*p2_R -alpha2_L*p2_L) \
-                                              - (alpha1_R - alpha1_L)*p1_star)/mq2;
-
-    double p2_star_L = p2_L - (mq2_L/alpha2_L)*(u2_star - u2_L);
-    double p2_star_R = p2_R + (mq2_R/alpha2_R)*(u2_star - u2_R);
-
-    Vector5d Star_State;
-    Star_State(0) = u1_star;
-    Star_State(1) = p1_star;
-    Star_State(2) = u2_star;
-    Star_State(3) = p2_star_L;
-    Star_State(4) = p2_star_R;
-
-    return Star_State;
-}
-*/
-
 Vector6d U_P_star_states(Vector5d& W_state_L, Vector5d& W_state_R,\
                          Vector4d& WaveSpeeds,\
                          ThermoLaw& Therm){
@@ -4918,7 +4072,6 @@ Vector5d HLLAC_Flux(Vector5d& W_state_L, Vector5d& W_state_R,\
     double u1_star_R = Star_UP(1);
     double u2_star   = Star_UP(3);
 
-    //FIXME
     double p1_star     = Star_UP(2);
     double p2_star_L   = Star_UP(4);
     double p2_star_R   = Star_UP(5);
@@ -4949,8 +4102,6 @@ Vector5d HLLAC_Flux(Vector5d& W_state_L, Vector5d& W_state_R,\
     }
     else if (ZERO < u2_star){
 
-        //FIXME
-        //mk = m1_L*(u1_L - S1_L)/(u1_star_L - S1_L);
         mk = alpha1_L*rho1_star;
         mkuk = mk*u1_star_L;
         Flux(1) = Flux_L(1) + S1_L*(mk - m1_L);
@@ -4958,8 +4109,6 @@ Vector5d HLLAC_Flux(Vector5d& W_state_L, Vector5d& W_state_R,\
     }
     else if (ZERO < S1_R){
 
-        //FIXME
-        //mk = m1_R*(u1_R - S1_R)/(u1_star_R - S1_R);
         mk = alpha1_R*rho1_star;
         mkuk = mk*u1_star_R;
         Flux(1) = Flux_R(1) + S1_R*(mk - m1_R);
@@ -4978,8 +4127,6 @@ Vector5d HLLAC_Flux(Vector5d& W_state_L, Vector5d& W_state_R,\
     }
     else if (ZERO < u2_star){
 
-        //FIXME
-        //mk = m2_L*(u2_L - S2_L)/(u2_star - S2_L);
         mk   = alpha2_L*rho2_star_L;
         mkuk = mk*u2_star;
         Flux(3) = Flux_L(3) + S2_L*(mk - m2_L);
@@ -4987,8 +4134,6 @@ Vector5d HLLAC_Flux(Vector5d& W_state_L, Vector5d& W_state_R,\
     }
     else if (ZERO < S2_R){
 
-        //FIXME
-        //mk = m2_R*(u2_R - S2_R)/(u2_star - S2_R);
         mk   = alpha2_R*rho2_star_R; 
         mkuk = mk*u2_star;
         Flux(3) = Flux_R(3) + S2_R*(mk - m2_R);
@@ -5143,7 +4288,7 @@ void Convergence_Curve(\
         Array<int, Eigen::Dynamic, 1>& CellsTab, \
         string FileOutputFormat, string CV_curve, int print_freq){
 
-    cout<<"Convergence Curve: Case "<<CV_curve<<endl;
+    cout<<"Starting the simulation: Case "<<CV_curve<<endl;
     cout<<"Simulation Time: "<<SimulationTime<<endl;
 
     int Npoints=CellsTab.size();
@@ -5161,16 +4306,20 @@ void Convergence_Curve(\
     std::setprecision(COUT_PRECISION);
 
     //Plotting the convergence curve
-    ofstream file((CV_curve+"CV_curve.dat").c_str(), ios::app);  //file flux declaration and file opening
+    //file flux declaration and file opening
+    ofstream file((CV_curve+"CV_curve.dat").c_str(), ios::app);  
 
     //Calculating the order of convergence
-    ofstream file_Order((CV_curve+"CV_order.dat").c_str(), ios::app);  //file flux declaration and file opening
+    //file flux declaration and file opening
+    ofstream file_Order((CV_curve+"CV_order.dat").c_str(), ios::app);  
 
     //CPU effiency curve
-    ofstream file_CPU((CV_curve+"CPU_efficiency.dat").c_str(), ios::app);  //file flux declaration and file opening
-    if(file && file_Order && file_CPU)  // If the opening is successful
+    //file flux declaration and file opening
+    ofstream file_CPU((CV_curve+"CPU_efficiency.dat").c_str(), ios::app);  
 
-    {
+    // If the opening is successful
+    if(file && file_Order && file_CPU){
+
 	//Writting column names
 	file<<"Ncells"<<" "<<"Alpha1_L1_err"<<" "\
 		<<"P1_L1_err"<<" "<<"U1_L1_err"<<" "\
@@ -5221,14 +4370,6 @@ void Convergence_Curve(\
                 FileOutputFormat,\
                 Nfaces\
                 );
-
-        //FIXME
-        //double CourantBL = solver_try.CourantBL_;
-        //double TauMin    = sol_try.etaRelax_(0);
-        //TimeIntegration(sol_try, solver_try.SimulationTime_, CourantBL*TauMin, CV_curve, CourantBL);
-        //exit(EXIT_FAILURE);
-
-        //solver_try.BoundaryLayerTest(sol_try, mesh_try, CV_curve);
 
 	    string FileName=CV_curve;        
        

@@ -13,13 +13,13 @@ double ZERO         = 0.00000000000000;
 double ONE_OVER_TWO = 0.50000000000000;
 double ONE          = 1.00000000000000;
 double TWO          = 2.00000000000000;
-double THREE        = 3.e0;
+double THREE        = 3.00000000000000;
 double FOUR         = 4.00000000000000;
 double EIGHT        = 8.00000000000000;
-double TEN          = 10.00000000000000;
-double TWENTY       = 20.00000000000000;
-double HUNDRED      = 100.00000000000000;
-double THOUSAND     = 1000.0000000000000;
+double TEN          = 10.0000000000000;
+double TWENTY       = 20.0000000000000;
+double HUNDRED      = 100.000000000000;
+double THOUSAND     = 1000.00000000000;
 
 double Pi           = 3.1415926535897931;
 
