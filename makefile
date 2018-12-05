@@ -21,8 +21,16 @@ HEADERS=Param.h Mesh.h ThermoLaw.h Sol_Isentropic.h Solver_Isentropic.h
 
 OBJS=$(subst .cxx,.o,$(SRCS)) # Variable identique à la variable SRCS sauf que tous les fichiers ont une extension ".o" et non plus ".cxx"
 
-#Chemin absolu menant vers le dossier contenant tous les dossiers bibliothèque
+#######################################################################
+# Absolute path leading to the library to be linked with the code files
+#######################################################################
+
+#Please provide the appropriate absolute path leading to the Libraries folder (after having Untar the Libraries.tar.gz archive)
+#Example:
 LIB_DIR=/home/iampietro/Documents/Administratif/After_PHD/Alan_Turing_Institute/Solver_Baer_Nunziato/Libraries/
+
+#######################################################################
+
 #Si par exemple dans le dossier Libraries il y a un dossier bibliothèque nommé "eigen", je fourni son nom ici
 LDLIBS=eigen/   
 
