@@ -1,5 +1,8 @@
 #!/bin/bash
 chmod +x RunSimulation.exe
+tar zxvf Figures.tar.gz
+tar zxvf Report.tar.gz
+tar zcvf Libraries.tar.gz
 make
 
 if [ ! -d "Output" ]; then
